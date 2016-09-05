@@ -1,10 +1,8 @@
 package com.github.kristofa.brave.p6spy;
 
 import com.github.kristofa.brave.ClientTracer;
-import com.p6spy.engine.common.PreparedStatementInformation;
 import com.p6spy.engine.common.StatementInformation;
-import com.p6spy.engine.event.JdbcEventListener;
-
+import com.p6spy.engine.event.SimpleJdbcEventListener;
 import zipkin.Constants;
 import zipkin.TraceKeys;
 
@@ -14,8 +12,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.sql.SQLException;
 
-public final class BraveP6SpyListener extends JdbcEventListener {
-
+public final class BraveP6SpyListener extends SimpleJdbcEventListener {
     // TODO: Figure out a better approach
     static volatile ClientTracer clientTracer;
 
@@ -41,77 +38,23 @@ public final class BraveP6SpyListener extends JdbcEventListener {
     }
 
     @Override
-    public void onBeforeExecute(PreparedStatementInformation statementInformation) {
-        startPreparedTrace(statementInformation);
-    }
-
-    @Override
-    public void onAfterExecute(PreparedStatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
-        endTrace(e);
-    }
-
-    @Override
-    public void onBeforeExecute(StatementInformation statementInformation, String sql) {
-        startTrace(sql);
-    }
-
-    @Override
-    public void onAfterExecute(StatementInformation statementInformation, long timeElapsedNanos, String sql, SQLException e) {
-        endTrace(e);
-    }
-
-    @Override
-    public void onBeforeExecuteBatch(StatementInformation statementInformation) {
+    public void onBeforeAnyExecute(StatementInformation statementInformation) {
         startTrace(statementInformation.getSql());
     }
 
     @Override
-    public void onAfterExecuteBatch(StatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
+    public void onAfterAnyExecute(StatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
         endTrace(e);
     }
 
     @Override
-    public void onBeforeExecuteUpdate(PreparedStatementInformation statementInformation) {
-        startPreparedTrace(statementInformation);
-    }
-
-    @Override
-    public void onAfterExecuteUpdate(PreparedStatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
-        endTrace(e);
-    }
-
-    @Override
-    public void onBeforeExecuteUpdate(StatementInformation statementInformation, String sql) {
-        startTrace(sql);
-    }
-
-    @Override
-    public void onAfterExecuteUpdate(StatementInformation statementInformation, long timeElapsedNanos, String sql, SQLException e) {
-        endTrace(e);
-    }
-
-    @Override
-    public void onBeforeExecuteQuery(PreparedStatementInformation statementInformation) {
-        startPreparedTrace(statementInformation);
-    }
-
-    @Override
-    public void onAfterExecuteQuery(PreparedStatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
-        endTrace(e);
-    }
-
-    @Override
-    public void onBeforeExecuteQuery(StatementInformation statementInformation, String sql) {
-        startTrace(sql);
-    }
-
-    @Override
-    public void onAfterExecuteQuery(StatementInformation statementInformation, long timeElapsedNanos, String sql, SQLException e) {
-        endTrace(e);
-    }
-
-    private void startPreparedTrace(PreparedStatementInformation statementInformation) {
+    public void onBeforeAnyAddBatch(StatementInformation statementInformation) {
         startTrace(statementInformation.getSql());
+    }
+
+    @Override
+    public void onAfterAnyAddBatch(StatementInformation statementInformation, long timeElapsedNanos, SQLException e) {
+        endTrace(e);
     }
 
     private void startTrace(String sql) {
@@ -148,5 +91,4 @@ public final class BraveP6SpyListener extends JdbcEventListener {
             tracer.setClientReceived();
         }
     }
-
 }
