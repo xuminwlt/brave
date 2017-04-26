@@ -1,9 +1,8 @@
 package com.github.kristofa.brave;
 
-import com.twitter.zipkin.gen.Annotation;
-import com.twitter.zipkin.gen.BinaryAnnotation;
 import com.twitter.zipkin.gen.Endpoint;
 import com.twitter.zipkin.gen.Span;
+import zipkin.reporter.Reporter;
 
 import static com.github.kristofa.brave.internal.Util.checkNotNull;
 
@@ -31,21 +30,9 @@ public abstract class AnnotationSubmitter {
         long currentTimeMicroseconds();
     }
 
-    static AnnotationSubmitter create(SpanAndEndpoint spanAndEndpoint) {
-        return new AnnotationSubmitterImpl(spanAndEndpoint, DefaultClock.INSTANCE);
-    }
+    abstract CurrentSpan currentSpan();
 
-    public static AnnotationSubmitter create(SpanAndEndpoint spanAndEndpoint, Clock clock) {
-        return new AnnotationSubmitterImpl(spanAndEndpoint, clock);
-    }
-
-    abstract SpanAndEndpoint spanAndEndpoint();
-
-    /** The implementation of Clock to use.
-     * See {@link com.github.kristofa.brave.AnnotationSubmitter#currentTimeMicroseconds}
-     * and {@link com.github.kristofa.brave.AnnotationSubmitter.Clock}
-     **/
-    abstract Clock clock();
+    abstract Recorder recorder();
 
     /**
      * Associates an event that explains latency with the current system time.
@@ -53,15 +40,9 @@ public abstract class AnnotationSubmitter {
      * @param value A short tag indicating the event, like "finagle.retry"
      */
     public void submitAnnotation(String value) {
-        Span span = spanAndEndpoint().span();
-        if (span != null) {
-            Annotation annotation = Annotation.create(
-                currentTimeMicroseconds(),
-                value,
-                spanAndEndpoint().endpoint()
-            );
-            addAnnotation(span, annotation);
-        }
+        Span span = currentSpan().get();
+        if (span == null) return;
+        recorder().annotate(span, recorder().currentTimeMicroseconds(), value);
     }
 
     /**
@@ -74,31 +55,19 @@ public abstract class AnnotationSubmitter {
      * @param timestamp microseconds from epoch
      */
     public void submitAnnotation(String value, long timestamp) {
-        Span span = spanAndEndpoint().span();
-        if (span != null) {
-            Annotation annotation = Annotation.create(
-                timestamp,
-                value,
-                spanAndEndpoint().endpoint()
-            );
-            addAnnotation(span, annotation);
-        }
+        Span span = currentSpan().get();
+        if (span == null) return;
+        recorder().annotate(span, timestamp, value);
     }
 
     /** This adds an annotation that corresponds with {@link Span#getTimestamp()} */
-    void submitStartAnnotation(String annotationName) {
-        Span span = spanAndEndpoint().span();
-        if (span != null) {
-            Annotation annotation = Annotation.create(
-                currentTimeMicroseconds(),
-                annotationName,
-                spanAndEndpoint().endpoint()
-            );
-            synchronized (span) {
-                span.setTimestamp(annotation.timestamp);
-                span.addToAnnotations(annotation);
-            }
-        }
+    void submitStartAnnotation(String startAnnotation) {
+        Span span = currentSpan().get();
+        if (span == null) return;
+
+        long timestamp = recorder().currentTimeMicroseconds();
+        recorder().annotate(span, timestamp, startAnnotation);
+        recorder().start(span, timestamp);
     }
 
     /**
@@ -107,40 +76,22 @@ public abstract class AnnotationSubmitter {
      *
      * @return true if a span was sent for collection.
      */
-    boolean submitEndAnnotation(String annotationName, SpanCollector spanCollector) {
-        Span span = spanAndEndpoint().span();
-        if (span == null) {
-          return false;
-        }
-        Annotation annotation = Annotation.create(
-            currentTimeMicroseconds(),
-            annotationName,
-            spanAndEndpoint().endpoint()
-        );
-        synchronized (span) {
-            span.addToAnnotations(annotation);
-            Long timestamp = span.getTimestamp();
-            if (timestamp != null) {
-                span.setDuration(annotation.timestamp - timestamp);
-            }
-        }
-        spanCollector.collect(span);
+    boolean submitEndAnnotation(String finishAnnotation) {
+        Span span = currentSpan().get();
+        if (span == null) return false;
+
+        long timestamp = recorder().currentTimeMicroseconds();
+        recorder().annotate(span, timestamp, finishAnnotation);
+        recorder().finish(span, timestamp);
         return true;
     }
 
-    /**
-     * Internal api for submitting an address. Until a naming function is added, this coerces null
-     * {@code serviceName} to "unknown", as that's zipkin's convention.
-     */
+    /** Internal api for submitting an address. */
     void submitAddress(String key, Endpoint endpoint) {
-        Span span = spanAndEndpoint().span();
-        if (span != null) {
-            if (endpoint.service_name == null) {
-                endpoint = endpoint.toBuilder().serviceName("unknown").build();
-            }
-            BinaryAnnotation ba = BinaryAnnotation.address(key, endpoint);
-            addBinaryAnnotation(span, ba);
-        }
+        Span span = currentSpan().get();
+        if (span == null) return;
+
+        recorder().address(span, key, endpoint);
     }
 
     /**
@@ -151,71 +102,64 @@ public abstract class AnnotationSubmitter {
      * @param value String value, should not be <code>null</code>.
      */
     public void submitBinaryAnnotation(String key, String value) {
-        Span span = spanAndEndpoint().span();
-        if (span != null) {
-            BinaryAnnotation ba = BinaryAnnotation.create(key, value, spanAndEndpoint().endpoint());
-            addBinaryAnnotation(span, ba);
-        }
+        Span span = currentSpan().get();
+        if (span == null) return;
+        recorder().tag(span, key, value);
     }
 
-    /**
-     * Submits a binary (key/value) annotation with int value.
-     *
-     * @param key Key, should not be blank.
-     * @param value Integer value.
-     */
-    public void submitBinaryAnnotation(String key, int value) {
+    /** @deprecated use {@link #submitBinaryAnnotation(String, String)} */
+    @Deprecated
+    public final void submitBinaryAnnotation(String key, int value) {
         // Zipkin v1 UI and query only support String annotations.
         submitBinaryAnnotation(key, String.valueOf(value));
-    }
-
-    long currentTimeMicroseconds() {
-        return clock().currentTimeMicroseconds();
-    }
-
-    private void addAnnotation(Span span, Annotation annotation) {
-        synchronized (span) {
-            span.addToAnnotations(annotation);
-        }
-    }
-
-    private void addBinaryAnnotation(Span span, BinaryAnnotation ba) {
-        synchronized (span) {
-            span.addToBinary_annotations(ba);
-        }
     }
 
     AnnotationSubmitter() {
     }
 
-    private static final class AnnotationSubmitterImpl extends AnnotationSubmitter {
-
-        private final SpanAndEndpoint spanAndEndpoint;
-        private final Clock clock;
-
-        private AnnotationSubmitterImpl(SpanAndEndpoint spanAndEndpoint, Clock clock) {
-            this.spanAndEndpoint = checkNotNull(spanAndEndpoint, "Null spanAndEndpoint");
-            this.clock = clock;
-        }
-
-        @Override
-        SpanAndEndpoint spanAndEndpoint() {
-            return spanAndEndpoint;
-        }
-
-        @Override
-        protected Clock clock() {
-            return clock;
-        }
-
-    }
-
+    /** Offset-based clock: Uses a single point of reference and offsets to create timestamps. */
     static final class DefaultClock implements Clock {
-        static final Clock INSTANCE = new DefaultClock();
-        private DefaultClock() {}
+        // epochMicros is derived by this
+        final long createTimestamp;
+        final long createTick;
+
+        DefaultClock() {
+            createTimestamp = System.currentTimeMillis() * 1000;
+            createTick = System.nanoTime();
+        }
+
+        /** gets a timestamp based on this the create tick. */
         @Override
         public long currentTimeMicroseconds() {
-            return System.currentTimeMillis() * 1000;
+            return ((System.nanoTime() - createTick) / 1000) + createTimestamp;
         }
+    }
+
+    /** @deprecated Please use {@link Brave#serverTracer()} instead. */
+    @Deprecated
+    public static AnnotationSubmitter create(final SpanAndEndpoint spanAndEndpoint,
+        final Clock clock) {
+        checkNotNull(spanAndEndpoint, "Null spanAndEndpoint");
+        checkNotNull(clock, "Null clock");
+        CurrentSpan currentSpan = new CurrentSpan(){
+            @Override Span get() {
+                return spanAndEndpoint.span();
+            }
+        };
+        Endpoint localEndpoint = spanAndEndpoint.endpoint();
+        Recorder recorder = new AutoValue_Recorder_Default(localEndpoint, clock, Reporter.NOOP);
+        return create(currentSpan, recorder);
+    }
+
+    static AnnotationSubmitter create(final CurrentSpan currentSpan, final Recorder recorder) {
+        return new AnnotationSubmitter() {
+            @Override CurrentSpan currentSpan() {
+                return currentSpan;
+            }
+
+            @Override Recorder recorder() {
+                return recorder;
+            }
+        };
     }
 }

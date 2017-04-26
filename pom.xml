@@ -4,38 +4,49 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>io.zipkin.brave</groupId>
-  <artifactId>brave</artifactId>
-  <version>3.11.2-SNAPSHOT</version>
+  <artifactId>brave-parent</artifactId>
+  <version>4.2.1-SNAPSHOT</version>
   <packaging>pom</packaging>
 
-  <name>brave</name>
+  <name>Brave (parent)</name>
   <description>
   Java implementation of Dapper (http://research.google.com/pubs/pub36356.html) compatible with Zipkin (https://github.com/twitter/zipkin/).
   </description>
   <url>https://github.com/kristofa/brave</url>
+
+  <organization>
+    <name>OpenZipkin</name>
+    <url>http://zipkin.io/</url>
+  </organization>
+
   <licenses>
-  	<license>
-		<name>Apache 2</name>
-		<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-		<distribution>repo</distribution>
-	</license>
-   </licenses>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
   <scm>
     <url>https://github.com/openzipkin/brave</url>
     <connection>scm:git:https://github.com/openzipkin/brave.git</connection>
     <developerConnection>scm:git:https://github.com/openzipkin/brave.git</developerConnection>
     <tag>HEAD</tag>
   </scm>
-   <developers>
-   		<developer>
-      		<id>kristofa</id>
-      		<name>Kristof Adriaenssens</name>
-      		<email>kr_adr@yahoo.co.uk</email>
-    	</developer>
-   </developers>
+
+  <!-- Developer section is needed for Maven Central, but doesn't need to include each person -->
+  <developers>
+    <developer>
+      <id>openzipkin</id>
+      <name>OpenZipkin Gitter</name>
+      <url>https://gitter.im/openzipkin/zipkin</url>
+    </developer>
+  </developers>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.build.resourceEncoding>UTF-8</project.build.resourceEncoding>
+    <main.basedir>${project.basedir}</main.basedir>
 
     <!-- default bytecode version for src/main -->
     <main.java.version>1.7</main.java.version>
@@ -45,32 +56,39 @@
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
 
-    <spring.version>4.3.2.RELEASE</spring.version>
-    <jetty.version>8.1.20.v20160902</jetty.version>
-    <zipkin.version>1.12.0</zipkin.version>
-    <log4j.version>2.3</log4j.version>
-    <httpcomponents.version>4.4.1</httpcomponents.version>
+    <spring.version>4.3.4.RELEASE</spring.version>
+    <!-- don't use apis not in jetty 7.6* else testing servlet 2.5 will imply duplication -->
+    <jetty.version>8.1.22.v20160922</jetty.version>
+    <zipkin.version>1.23.2</zipkin.version>
+    <zipkin-reporter.version>0.7.0</zipkin-reporter.version>
+    <finagle.version>6.44.0</finagle.version>
+    <log4j.version>2.8.1</log4j.version>
+    <okhttp.version>3.6.0</okhttp.version>
+    <grpc.version>1.2.0</grpc.version>
+    <powermock.version>1.6.6</powermock.version>
+    <jmh.version>1.18</jmh.version>
 
-    <maven-plugin.version>0.3.3</maven-plugin.version>
-    <maven-compiler-plugin.version>3.5.1</maven-compiler-plugin.version>
+    <maven-compiler-plugin.version>3.6.1</maven-compiler-plugin.version>
     <maven-install-plugin.version>2.5.2</maven-install-plugin.version>
-    <maven-source-plugin.version>3.0.0</maven-source-plugin.version>
-    <maven-javadoc-plugin.version>2.10.3</maven-javadoc-plugin.version>
-    <maven-jar-plugin.version>2.6</maven-jar-plugin.version>
+    <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
+    <maven-javadoc-plugin.version>2.10.4</maven-javadoc-plugin.version>
+    <maven-jar-plugin.version>3.0.2</maven-jar-plugin.version>
     <maven-release-plugin.version>2.5.3</maven-release-plugin.version>
-    <maven-shade-plugin.version>2.4.3</maven-shade-plugin.version>
+    <maven-shade-plugin.version>3.0.0</maven-shade-plugin.version>
     <centralsync-maven-plugin.version>0.1.0</centralsync-maven-plugin.version>
 
     <!-- Catch common Java mistakes as compile-time errors -->
-    <plexus-compiler-javac-errorprone.version>2.8</plexus-compiler-javac-errorprone.version>
-    <errorprone.version>2.0.9</errorprone.version>
+    <plexus-compiler-javac-errorprone.version>2.8.1</plexus-compiler-javac-errorprone.version>
+    <errorprone.version>2.0.19</errorprone.version>
     <animal-sniffer-maven-plugin.version>1.15</animal-sniffer-maven-plugin.version>
   </properties>
 
   <modules>
+    <module>brave</module>
     <module>brave-core</module>
     <module>brave-benchmarks</module>
     <module>brave-http</module>
+    <module>brave-http-tests</module>
     <module>brave-core-spring</module>
     <module>brave-resteasy-spring</module>
     <module>brave-resteasy3-spring</module>
@@ -90,6 +108,7 @@
     <module>brave-web-servlet-filter</module>
     <module>brave-okhttp</module>
     <module>brave-p6spy</module>
+    <module>brave-sparkjava</module>
   </modules>
 
   <distributionManagement>
@@ -110,6 +129,36 @@
 
   <dependencyManagement>
   	<dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>brave</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>brave-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>brave-http</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>brave-web-servlet-filter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>brave-jaxrs2</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>brave-http-tests</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>io.zipkin.java</groupId>
             <artifactId>zipkin</artifactId>
@@ -166,22 +215,28 @@
         <dependency>
             <groupId>com.google.auto.value</groupId>
             <artifactId>auto-value</artifactId>
-            <version>1.1</version>
+            <version>1.4</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.4</version>
+            <version>3.5</version>
         </dependency>
+        <!-- The httpcomponents group do not share versions within it -->
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpcore</artifactId>
-            <version>${httpcomponents.version}</version>
+            <version>4.4.5</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>${httpcomponents.version}</version>
+            <version>4.5.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpasyncclient</artifactId>
+            <version>4.1.2</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -198,6 +253,36 @@
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>${log4j.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.6.2</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>javax.ws.rs-api</artifactId>
+            <version>2.0.1</version>
+        </dependency>
   	</dependencies>
   </dependencyManagement>
 
@@ -205,14 +290,12 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.12</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
       <scope>test</scope>
-      <version>3.2.0</version>
     </dependency>
     <!-- Main code uses jul and tests log with log4j -->
     <dependency>
@@ -220,9 +303,22 @@
         <artifactId>log4j-core</artifactId>
         <scope>test</scope>
     </dependency>
+    <!-- route jul over log4j2 during tests -->
     <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-jul</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <!-- route log4j over log4j2 during tests -->
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <!-- route slf4j over log4j2 during tests -->
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
         <scope>test</scope>
     </dependency>
     <dependency>
@@ -236,11 +332,11 @@
   <build>
     <pluginManagement>
       <plugins>
-        <!-- mvn -N io.takari:maven:wrapper -Dmaven=3.3.9 -->
+        <!-- mvn -N io.takari:maven:wrapper -Dmaven=3.5.0 -->
         <plugin>
           <groupId>io.takari</groupId>
           <artifactId>maven</artifactId>
-          <version>${maven-plugin.version}</version>
+          <version>0.3.4</version>
         </plugin>
 
         <plugin>
@@ -257,6 +353,33 @@
           <artifactId>maven-shade-plugin</artifactId>
           <version>${maven-shade-plugin.version}</version>
         </plugin>
+            <plugin>
+                <groupId>org.eclipse.m2e</groupId>
+                <artifactId>lifecycle-mapping</artifactId>
+                <version>1.0.0</version>
+                <configuration>
+                    <lifecycleMappingMetadata>
+                        <pluginExecutions>
+                            <pluginExecution>
+                                <pluginExecutionFilter>
+                                    <groupId>org.apache.maven.plugins</groupId>
+                                    <artifactId>maven-compiler-plugin</artifactId>
+                                    <versionRange>[3.3,)</versionRange>
+                                    <goals>
+                                        <goal>compile</goal>
+                                        <goal>testCompile</goal>
+                                    </goals>
+                                </pluginExecutionFilter>
+                                <action>
+                                    <configurator>
+                                        <id>org.eclipse.m2e.jdt.javaConfigurator</id>
+                                    </configurator>
+                                </action>
+                            </pluginExecution>
+                        </pluginExecutions>
+                    </lifecycleMappingMetadata>
+                </configuration>
+            </plugin>
       </plugins>
     </pluginManagement>
         <resources>
@@ -292,28 +415,60 @@
             </testResource>
         </testResources>
       <plugins>
+          <plugin>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>maven-bundle-plugin</artifactId>
+            <version>3.3.0</version>
+            <configuration>
+              <obrRepository>NONE</obrRepository>
+              <instructions>
+                <_include>-bnd.bnd</_include>
+              </instructions>
+            </configuration>
+            <executions>
+              <execution>
+                <phase>process-classes</phase>
+                <goals>
+                  <goal>manifest</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <configuration>
+              <archive>
+                <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+              </archive>
+            </configuration>
+          </plugin>
         <plugin>
           <inherited>true</inherited>
           <artifactId>maven-compiler-plugin</artifactId>
+          <configuration>
+            <!-- Retrolambda will rewrite lambdas as Java 6 bytecode -->
+            <source>1.8</source>
+            <target>1.8</target>
+          </configuration>
           <executions>
-            <!-- Ensure main source tree compiles to Java ${main.java.version} bytecode. -->
             <execution>
               <id>default-compile</id>
               <phase>compile</phase>
               <goals>
                 <goal>compile</goal>
               </goals>
+              <!-- only use errorprone on main source tree -->
               <configuration>
-                <source>${main.java.version}</source>
-                <target>${main.java.version}</target>
+                <compilerId>javac-with-errorprone</compilerId>
+                <forceJavacCompilerUse>true</forceJavacCompilerUse>
+                <showWarnings>true</showWarnings>
+                <compilerArgs>
+                  <arg>-XepDisableWarningsInGeneratedCode</arg>
+                </compilerArgs>
               </configuration>
             </execution>
           </executions>
-          <configuration>
-            <compilerId>javac-with-errorprone</compilerId>
-            <forceJavacCompilerUse>true</forceJavacCompilerUse>
-            <showWarnings>true</showWarnings>
-          </configuration>
           <dependencies>
             <dependency>
               <groupId>org.codehaus.plexus</groupId>
@@ -326,6 +481,23 @@
               <version>${errorprone.version}</version>
             </dependency>
           </dependencies>
+        </plugin>
+
+        <plugin>
+          <groupId>net.orfjackal.retrolambda</groupId>
+          <artifactId>retrolambda-maven-plugin</artifactId>
+          <version>2.5.1</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>process-main</goal>
+              </goals>
+              <configuration>
+                <target>${main.java.version}</target>
+                <fork>true</fork>
+              </configuration>
+            </execution>
+          </executions>
         </plugin>
 
         <plugin>
@@ -350,7 +522,7 @@
 
           <plugin>
               <artifactId>maven-surefire-plugin</artifactId>
-              <version>2.18.1</version>
+              <version>2.19.1</version>
               <configuration>
                   <systemPropertyVariables>
                       <java.util.logging.manager>org.apache.logging.log4j.jul.LogManager</java.util.logging.manager>
@@ -360,7 +532,7 @@
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>
               <artifactId>maven-eclipse-plugin</artifactId>
-              <version>2.9</version>
+              <version>2.10</version>
               <configuration>
                   <downloadSources>true</downloadSources>
                   <downloadJavadocs>true</downloadJavadocs>
@@ -369,7 +541,7 @@
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>
               <artifactId>maven-failsafe-plugin</artifactId>
-              <version>2.14</version>
+              <version>2.19.1</version>
               <executions>
                   <execution>
                       <id>integration-test</id>

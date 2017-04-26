@@ -2,8 +2,8 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>io.zipkin.brave</groupId>
-        <artifactId>brave</artifactId>
-        <version>3.11.2-SNAPSHOT</version>
+        <artifactId>brave-parent</artifactId>
+        <version>4.2.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>brave-http</artifactId>
@@ -13,25 +13,17 @@
     <description>
         Abstraction that makes it easier to implement brave in http clients and servers.
     </description>
-    <url>https://github.com/kristofa/brave</url>
-    <licenses>
-        <license>
-            <name>Apache 2</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-            <distribution>repo</distribution>
-        </license>
-    </licenses>
+
     <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <main.basedir>${project.basedir}/..</main.basedir>
         <main.java.version>1.6</main.java.version>
         <main.signature.artifact>java16</main.signature.artifact>
     </properties>
 
     <dependencies>
         <dependency>
-            <groupId>io.zipkin.brave</groupId>
+            <groupId>${project.groupId}</groupId>
             <artifactId>brave-core</artifactId>
-            <version>3.11.2-SNAPSHOT</version>
         </dependency>
     </dependencies>
 </project>

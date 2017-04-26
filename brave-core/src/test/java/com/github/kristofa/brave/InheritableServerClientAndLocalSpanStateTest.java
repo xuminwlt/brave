@@ -35,10 +35,16 @@ public class InheritableServerClientAndLocalSpanStateTest {
         mockSpan = mock(Span.class);
     }
 
+    @Test
+    public void setCurrentServerSpanNullRevertsToEmpty() {
+        state.setCurrentServerSpan(null);
+        assertEquals(ServerSpan.EMPTY, state.getCurrentServerSpan());
+    }
+
     @After
     public void tearDown() {
         state.setCurrentClientSpan(null);
-        state.setCurrentServerSpan(null);
+        state.setCurrentServerSpan(ServerSpan.EMPTY);
         Span localSpan;
         int depth = 0;
         while ((localSpan = state.getCurrentLocalSpan()) != null) {
@@ -52,7 +58,7 @@ public class InheritableServerClientAndLocalSpanStateTest {
 
     @Test
     public void testGetAndSetCurrentServerSpan() {
-        assertEquals(ServerSpan.create(null), state.getCurrentServerSpan());
+        assertEquals(ServerSpan.EMPTY, state.getCurrentServerSpan());
         state.setCurrentServerSpan(mockServerSpan);
         assertSame(mockServerSpan, state.getCurrentServerSpan());
         assertNull("Should not have been modified.", state.getCurrentClientSpan());
@@ -63,7 +69,7 @@ public class InheritableServerClientAndLocalSpanStateTest {
         assertNull(state.getCurrentClientSpan());
         state.setCurrentClientSpan(mockSpan);
         assertSame(mockSpan, state.getCurrentClientSpan());
-        assertEquals("Should not have been modified.", ServerSpan.create(null),
+        assertEquals("Should not have been modified.", ServerSpan.EMPTY,
                 state.getCurrentServerSpan());
     }
 
@@ -73,8 +79,7 @@ public class InheritableServerClientAndLocalSpanStateTest {
         assertNull(state.getCurrentLocalSpan());
         state.setCurrentLocalSpan(mockSpan);
         assertSame(mockSpan, state.getCurrentLocalSpan());
-        assertEquals("Should not have been modified.", ServerSpan.create(null),
-                state.getCurrentServerSpan());
+        assertEquals("Should not have been modified.", ServerSpan.EMPTY, state.getCurrentServerSpan());
         assertNull(state.getCurrentClientSpan());
     }
 
@@ -84,7 +89,7 @@ public class InheritableServerClientAndLocalSpanStateTest {
         assertNull(state.getCurrentLocalSpan());
         state.setCurrentLocalSpan(mockSpan);
         assertSame(mockSpan, state.getCurrentLocalSpan());
-        assertEquals("Should not have been modified.", ServerSpan.create(null),
+        assertEquals("Should not have been modified.", ServerSpan.EMPTY,
                 state.getCurrentServerSpan());
         assertNull(state.getCurrentClientSpan());
     }
@@ -112,7 +117,7 @@ public class InheritableServerClientAndLocalSpanStateTest {
         assertThat(currentParentSpan(state)).isSameAs(mockServerSpan.getSpan());
         assertThat(currentParentSpan(state)).isNotEqualTo(mockSpan);
 
-        state.setCurrentServerSpan(null);
+        state.setCurrentServerSpan(ServerSpan.EMPTY);
         assertThat(currentParentSpan(state)).isNull();
     }
 

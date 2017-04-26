@@ -8,9 +8,8 @@ import com.github.kristofa.brave.internal.Nullable;
 import com.twitter.zipkin.gen.Endpoint;
 import zipkin.TraceKeys;
 
-import java.net.URI;
-import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 
 public class HttpClientRequestAdapter implements ClientRequestAdapter {
 
@@ -21,7 +20,6 @@ public class HttpClientRequestAdapter implements ClientRequestAdapter {
         this.request = request;
         this.spanNameProvider = spanNameProvider;
     }
-
 
     @Override
     public String getSpanName() {
@@ -34,7 +32,7 @@ public class HttpClientRequestAdapter implements ClientRequestAdapter {
             request.addHeader(BraveHttpHeaders.Sampled.getName(), "0");
         } else {
             request.addHeader(BraveHttpHeaders.Sampled.getName(), "1");
-            request.addHeader(BraveHttpHeaders.TraceId.getName(), IdConversion.convertToString(spanId.traceId));
+            request.addHeader(BraveHttpHeaders.TraceId.getName(), spanId.traceIdString());
             request.addHeader(BraveHttpHeaders.SpanId.getName(), IdConversion.convertToString(spanId.spanId));
             if (spanId.nullableParentId() != null) {
                 request.addHeader(BraveHttpHeaders.ParentSpanId.getName(), IdConversion.convertToString(spanId.parentId));
@@ -42,16 +40,15 @@ public class HttpClientRequestAdapter implements ClientRequestAdapter {
         }
     }
 
-
     @Override
     public Collection<KeyValueAnnotation> requestAnnotations() {
-        URI uri = request.getUri();
-        KeyValueAnnotation annotation = KeyValueAnnotation.create(TraceKeys.HTTP_URL, uri.toString());
-        return Arrays.asList(annotation);
+        return Collections.singleton(KeyValueAnnotation.create(
+                TraceKeys.HTTP_URL, request.getUri().toString()));
     }
 
     @Override
     public Endpoint serverAddress() {
         return null;
     }
+
 }

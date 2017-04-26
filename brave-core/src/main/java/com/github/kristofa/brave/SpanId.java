@@ -1,7 +1,6 @@
 package com.github.kristofa.brave;
 
 import com.github.kristofa.brave.internal.Nullable;
-import com.twitter.zipkin.gen.Span;
 import java.nio.ByteBuffer;
 
 import static com.github.kristofa.brave.internal.Util.checkNotNull;
@@ -49,26 +48,42 @@ public final class SpanId {
    */
   @Deprecated
   public SpanId(long traceId, long parentId, long spanId, long flags) {
-    this.traceId = (parentId == traceId) ? parentId : traceId;
-    this.parentId = (parentId == spanId) ? traceId : parentId;
-    this.spanId = spanId;
-    this.flags = flags;
+    this(new Builder().traceId(parentId == traceId ? parentId : traceId)
+        .parentId(parentId == spanId ? null : parentId)
+        .spanId(spanId)
+        .flags(flags));
+  }
+
+  SpanId(Builder builder) {
+    checkNotNull(builder.spanId, "spanId");
+    this.traceIdHigh = builder.traceIdHigh;
+    this.traceId = builder.traceId != null ? builder.traceId : builder.spanId;
+    this.parentId = builder.nullableParentId != null ? builder.nullableParentId : this.traceId;
+    this.spanId = builder.spanId;
+    this.flags = builder.flags;
+    this.shared = builder.shared;
   }
 
   /** Deserializes this from a big-endian byte array */
   public static SpanId fromBytes(byte[] bytes) {
     checkNotNull(bytes, "bytes");
-    if (bytes.length != 32) {
-      throw new IllegalArgumentException("bytes.length " + bytes.length + " != 32");
+    if (bytes.length != 32 && bytes.length != 40) {
+      throw new IllegalArgumentException("bytes.length " + bytes.length + " != 32 or 40");
     }
 
     ByteBuffer buffer = ByteBuffer.wrap(bytes);
-    long spanId = buffer.getLong(0);
-    long parentId = buffer.getLong(8);
-    long traceId = buffer.getLong(16);
-    long flags = buffer.getLong(24);
-
-    return new SpanId(traceId, parentId, spanId, flags);
+    Builder builder = new Builder();
+    builder.spanId(buffer.getLong(0));
+    builder.parentId(buffer.getLong(8));
+    if (bytes.length == 32) {
+      builder.traceId(buffer.getLong(16));
+      builder.flags(buffer.getLong(24));
+    } else {
+      builder.traceIdHigh(buffer.getLong(16));
+      builder.traceId(buffer.getLong(24));
+      builder.flags(buffer.getLong(32));
+    }
+    return new SpanId(builder);
   }
 
   public static Builder builder() {
@@ -110,6 +125,13 @@ public final class SpanId {
   }
 
   /**
+   * When non-zero, the trace containing this span uses 128-bit trace identifiers.
+   *
+   * @since 3.15
+   */
+  public final long traceIdHigh;
+
+  /**
    * Unique 8-byte identifier for a trace, set on all spans within it.
    */
   public final long traceId;
@@ -134,7 +156,7 @@ public final class SpanId {
 
   /** Returns true if this is the root span. */
   public final boolean root() {
-    return (flags & FLAG_IS_ROOT) == FLAG_IS_ROOT || parentId == traceId && parentId == spanId;
+    return (flags & FLAG_IS_ROOT) == FLAG_IS_ROOT || (parentId == traceId && parentId == spanId);
   }
 
   /**
@@ -160,14 +182,31 @@ public final class SpanId {
   /** Raw flags encoded in {@link #bytes()} */
   public final long flags;
 
+  /**
+   * True if we are contributing to a span started by another tracer (ex on a different host).
+   * Defaults to false.
+   *
+   * <p>When an RPC trace is client-originated, it will be sampled and the same span ID is used for
+   * the server side. However, the server shouldn't set span.timestamp or duration since it didn't
+   * start the span.
+   */
+  public final boolean shared;
+
   /** Serializes this into a big-endian byte array */
   public byte[] bytes() {
-    byte[] result = new byte[32];
+    boolean traceHi = traceIdHigh != 0;
+    byte[] result = new byte[traceHi ? 40 : 32];
     ByteBuffer buffer = ByteBuffer.wrap(result);
     buffer.putLong(0, spanId);
     buffer.putLong(8, parentId);
-    buffer.putLong(16, traceId);
-    buffer.putLong(24, flags);
+    if (traceHi) {
+      buffer.putLong(16, traceIdHigh);
+      buffer.putLong(24, traceId);
+      buffer.putLong(32, flags);
+    } else {
+      buffer.putLong(16, traceId);
+      buffer.putLong(24, flags);
+    }
     return result;
   }
 
@@ -178,13 +217,21 @@ public final class SpanId {
   /** Returns {@code $traceId.$spanId<:$parentId} */
   @Override
   public String toString() {
-    char[] result = new char[(3 * 16) + 3]; // 3 ids and the constant delimiters
-    writeHexLong(result, 0, traceId);
-    result[16] = '.';
-    writeHexLong(result, 17, spanId);
-    result[33] = '<';
-    result[34] = ':';
-    writeHexLong(result, 35, parentId);
+    boolean traceHi = traceIdHigh != 0;
+    char[] result = new char[((traceHi ? 4 : 3) * 16) + 3]; // 3 ids and the constant delimiters
+    int pos = 0;
+    if (traceHi) {
+      writeHexLong(result, pos, traceIdHigh);
+      pos += 16;
+    }
+    writeHexLong(result, pos, traceId);
+    pos += 16;
+    result[pos++] = '.';
+    writeHexLong(result, pos, spanId);
+    pos += 16;
+    result[pos++] = '<';
+    result[pos++] = ':';
+    writeHexLong(result, pos, parentId);
     return new String(result);
   }
 
@@ -195,8 +242,8 @@ public final class SpanId {
     }
     if (o instanceof SpanId) {
       SpanId that = (SpanId) o;
-      return (this.traceId == that.traceId)
-          && (this.parentId == that.parentId)
+      return (this.traceIdHigh == that.traceIdHigh)
+          && (this.traceId == that.traceId)
           && (this.spanId == that.spanId);
     }
     return false;
@@ -206,39 +253,52 @@ public final class SpanId {
   public int hashCode() {
     int h = 1;
     h *= 1000003;
-    h ^= (traceId >>> 32) ^ traceId;
+    h ^= (traceIdHigh >>> 32) ^ traceIdHigh;
     h *= 1000003;
-    h ^= (parentId >>> 32) ^ parentId;
+    h ^= (traceId >>> 32) ^ traceId;
     h *= 1000003;
     h ^= (spanId >>> 32) ^ spanId;
     return h;
   }
 
-  /** Preferred way to create spans, as it properly deals with the parent id */
-  public Span toSpan() {
-    Span result = new Span();
-    result.setId(spanId);
-    result.setTrace_id(traceId);
-    result.setParent_id(nullableParentId());
-    result.setName(""); // avoid NPE on equals
-    if (debug()) result.setDebug(debug());
-    return result;
+  /**
+   * Returns the hex representation of the span's trace ID
+   *
+   * @since 3.15
+   */
+  public String traceIdString() {
+    if (traceIdHigh != 0) {
+      char[] result = new char[32];
+      writeHexLong(result, 0, traceIdHigh);
+      writeHexLong(result, 16, traceId);
+      return new String(result);
+    }
+    char[] result = new char[16];
+    writeHexLong(result, 0, traceId);
+    return new String(result);
   }
 
   public static final class Builder {
+    long traceIdHigh = 0;
     Long traceId;
-    Long parentId;
+    Long nullableParentId;
     Long spanId;
     long flags;
-
-    Builder() {
-    }
+    boolean shared;
 
     Builder(SpanId source) {
+      this.traceIdHigh = source.traceIdHigh;
       this.traceId = source.traceId;
-      this.parentId = source.nullableParentId();
+      this.nullableParentId = source.nullableParentId();
       this.spanId = source.spanId;
       this.flags = source.flags;
+      this.shared = source.shared;
+    }
+
+    /** @see SpanId#traceIdHigh */
+    public Builder traceIdHigh(long traceIdHigh) {
+      this.traceIdHigh = traceIdHigh;
+      return this;
     }
 
     /** @see SpanId#traceId */
@@ -258,7 +318,7 @@ public final class SpanId {
       } else {
         this.flags &= ~FLAG_IS_ROOT;
       }
-      this.parentId = parentId;
+      this.nullableParentId = parentId;
       return this;
     }
 
@@ -284,6 +344,12 @@ public final class SpanId {
       return this;
     }
 
+    /** @see SpanId#shared */
+    public Builder shared(boolean shared) {
+      this.shared = shared;
+      return this;
+    }
+
     /** @see SpanId#sampled */
     public Builder sampled(@Nullable Boolean sampled) {
       if (sampled != null) {
@@ -300,9 +366,10 @@ public final class SpanId {
     }
 
     public SpanId build() {
-      long traceId = this.traceId != null ? this.traceId : checkNotNull(spanId, "spanId");
-      long parentId = this.parentId != null ? this.parentId : traceId;
-      return new SpanId(traceId, parentId, checkNotNull(spanId, "spanId"), flags);
+      return new SpanId(this);
+    }
+
+    Builder() {
     }
   }
 

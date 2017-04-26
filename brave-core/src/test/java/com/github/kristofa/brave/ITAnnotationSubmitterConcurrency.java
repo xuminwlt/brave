@@ -1,9 +1,8 @@
 package com.github.kristofa.brave;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
+import com.github.kristofa.brave.AnnotationSubmitter.DefaultClock;
 import com.twitter.zipkin.gen.Endpoint;
+import com.twitter.zipkin.gen.Span;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -12,13 +11,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import zipkin.reporter.Reporter;
 
-import com.github.kristofa.brave.SpanAndEndpoint.StaticSpanAndEndpoint;
-import com.twitter.zipkin.gen.Span;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * This isSampled proves that we have proper synchronisation when submitted annotations for the same span. Without proper
@@ -30,14 +29,21 @@ import com.twitter.zipkin.gen.Span;
 public class ITAnnotationSubmitterConcurrency {
 
     private ExecutorService executorService;
-    private Span span;
+    Span span = Brave.toSpan(SpanId.builder().spanId(1L).build());
     private Endpoint endpoint =
         Endpoint.builder().serviceName("foobar").ipv4(127 << 24 | 1).port(9999).build();
+    DefaultClock clock = new DefaultClock();
+    CurrentSpan currentSpan = new CurrentSpan() {
+        @Override Span get() {
+            return span;
+        }
+    };
+    Recorder recorder = new AutoValue_Recorder_Default(endpoint, clock, Reporter.NOOP);
+    AnnotationSubmitter annotationSubmitter = AnnotationSubmitter.create(currentSpan, recorder);
 
     @Before
     public void setup() {
         executorService = Executors.newFixedThreadPool(4);
-        span = new Span();
     }
 
     @After
@@ -47,8 +53,6 @@ public class ITAnnotationSubmitterConcurrency {
 
     @Test
     public void testSubmitAnnotations() throws InterruptedException, ExecutionException {
-
-        final AnnotationSubmitter annotationSubmitter = AnnotationSubmitter.create(StaticSpanAndEndpoint.create(span, endpoint));
 
         final List<AnnotationSubmitThread> threadList =
             Arrays.asList(new AnnotationSubmitThread(1, 100, annotationSubmitter), new AnnotationSubmitThread(101, 200,

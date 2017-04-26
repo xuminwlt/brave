@@ -19,7 +19,10 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 /**
  * Extend this class to offload the task of reporting spans to separate thread. By doing so, callers
  * are protected from latency or exceptions possible when exporting spans out of process.
+ *
+ * @deprecated replaced by {@link zipkin.reporter.AsyncReporter}
  */
+@Deprecated
 public abstract class FlushingSpanCollector implements SpanCollector, Flushable, Closeable {
 
   private final SpanCollectorMetricsHandler metrics;
@@ -75,12 +78,8 @@ public abstract class FlushingSpanCollector implements SpanCollector, Flushable,
 
     Flusher(Flushable flushable, int flushInterval, final String threadPoolName) {
       this.flushable = flushable;
-      this.scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(final Runnable r) {
-          return new Thread(r, threadPoolName);
-        }
-      });
+      this.scheduler = Executors.newSingleThreadScheduledExecutor(
+          r -> new Thread(r, threadPoolName));
       this.scheduler.scheduleWithFixedDelay(this, 0, flushInterval, SECONDS);
     }
 

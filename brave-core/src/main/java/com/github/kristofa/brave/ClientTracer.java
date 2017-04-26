@@ -1,14 +1,12 @@
 package com.github.kristofa.brave;
 
-import com.google.auto.value.AutoValue;
-
-import com.github.kristofa.brave.SpanAndEndpoint.ClientSpanAndEndpoint;
 import com.github.kristofa.brave.internal.Nullable;
+import com.google.auto.value.AutoValue;
 import com.twitter.zipkin.gen.Endpoint;
 import com.twitter.zipkin.gen.Span;
-import zipkin.Constants;
-
 import java.util.Random;
+import zipkin.Constants;
+import zipkin.reporter.Reporter;
 
 /**
  * Low level api that deals with client side of a request:
@@ -28,38 +26,75 @@ import java.util.Random;
 @AutoValue
 public abstract class ClientTracer extends AnnotationSubmitter {
 
+    /** @deprecated Don't build your own ClientTracer. Use {@link Brave#clientTracer()} */
+    @Deprecated
     public static Builder builder() {
-        return new AutoValue_ClientTracer.Builder();
+        return new Builder();
     }
 
-    @Override
-    abstract ClientSpanAndEndpoint spanAndEndpoint();
-    abstract Random randomGenerator();
-    abstract SpanCollector spanCollector();
-    abstract Sampler traceSampler();
-    @Override
-    abstract AnnotationSubmitter.Clock clock();
+    abstract CurrentSpan currentLocalSpan();
+    abstract ServerSpanThreadBinder currentServerSpan();
+    @Override abstract ClientSpanThreadBinder currentSpan();
+    abstract SpanFactory spanFactory();
 
-    @AutoValue.Builder
-    public abstract static class Builder {
+    /** @deprecated Don't build your own ClientTracer. Use {@link Brave#clientTracer()} */
+    @Deprecated
+    public final static class Builder {
+        final SpanFactory.Default.Builder spanFactoryBuilder = SpanFactory.Default.builder();
+        Endpoint localEndpoint;
+        CurrentSpan currentLocalSpan;
+        ServerSpanThreadBinder currentServerSpan;
+        ClientSpanThreadBinder currentSpan;
+        Reporter reporter;
+        Clock clock;
 
-        public Builder state(ServerClientAndLocalSpanState state) {
-            return spanAndEndpoint(ClientSpanAndEndpoint.create(state));
+        /** Used to generate new trace/span ids. */
+        public final Builder randomGenerator(Random randomGenerator) {
+            spanFactoryBuilder.randomGenerator(randomGenerator);
+            return this;
         }
 
-        abstract Builder spanAndEndpoint(ClientSpanAndEndpoint spanAndEndpoint);
+        public final Builder traceSampler(Sampler sampler) {
+            spanFactoryBuilder.sampler(sampler);
+            return this;
+        }
 
-        /**
-         * Used to generate new trace/span ids.
-         */
-        public abstract Builder randomGenerator(Random randomGenerator);
+        public final Builder state(ServerClientAndLocalSpanState state) {
+            this.currentLocalSpan = new LocalSpanThreadBinder(state);
+            this.currentServerSpan = new ServerSpanThreadBinder(state);
+            this.currentSpan = new ClientSpanThreadBinder(state);
+            this.localEndpoint = state.endpoint();
+            return this;
+        }
 
-        public abstract Builder spanCollector(SpanCollector spanCollector);
+        public final Builder reporter(Reporter<zipkin.Span> reporter) {
+            this.reporter = reporter;
+            return this;
+        }
 
-        public abstract Builder traceSampler(Sampler sampler);
-        public abstract Builder clock(AnnotationSubmitter.Clock clock);
+        /** @deprecated use {@link #reporter(Reporter)} */
+        @Deprecated
+        public final Builder spanCollector(SpanCollector spanCollector) {
+            return reporter(new SpanCollectorReporterAdapter(spanCollector));
+        }
 
-        public abstract ClientTracer build();
+        public final Builder clock(Clock clock) {
+            this.clock = clock;
+            return this;
+        }
+
+        public final ClientTracer build() {
+            return new AutoValue_ClientTracer(
+                new AutoValue_Recorder_Default(localEndpoint, clock, reporter),
+                currentLocalSpan,
+                currentServerSpan,
+                currentSpan,
+                spanFactoryBuilder.build()
+            );
+        }
+
+        Builder() { // intentionally package private
+        }
     }
 
     /**
@@ -101,8 +136,8 @@ public abstract class ClientTracer extends AnnotationSubmitter {
      * event means this span is finished.
      */
     public void setClientReceived() {
-        if (submitEndAnnotation(Constants.CLIENT_RECV, spanCollector())) {
-            spanAndEndpoint().state().setCurrentClientSpan(null);
+        if (submitEndAnnotation(Constants.CLIENT_RECV)) {
+            currentSpan().setCurrentSpan(null);
         }
     }
 
@@ -110,45 +145,42 @@ public abstract class ClientTracer extends AnnotationSubmitter {
      * Start a new span for a new client request that will be bound to current thread. The ClientTracer can decide to return
      * <code>null</code> in case this request should not be traced (eg sampling).
      *
-     * @param requestName Request name. Should be lowercase and not <code>null</code> or empty.
+     * @param requestName Request name. Should be lowercase. Null or empty will defer to the server's name of the operation.
      * @return Span id for new request or <code>null</code> in case we should not trace this new client request.
      */
-    public SpanId startNewSpan(String requestName) {
-
-        Boolean sample = spanAndEndpoint().state().sample();
+    public SpanId startNewSpan(@Nullable String requestName) {
+        // When a trace context is extracted from an incoming request, it may have only the
+        // sampled header (no ids). If the header says unsampled, we must honor that. Since
+        // we currently don't synthesize a fake span when a trace is unsampled, we have to
+        // check sampled state explicitly.
+        Boolean sample = currentServerSpan().sampled();
         if (Boolean.FALSE.equals(sample)) {
-            spanAndEndpoint().state().setCurrentClientSpan(null);
+            currentSpan().setCurrentSpan(null);
             return null;
         }
 
-        SpanId newSpanId = getNewSpanId();
-        if (sample == null) {
-            // No sample indication is present.
-            if (!traceSampler().isSampled(newSpanId.traceId)) {
-                spanAndEndpoint().state().setCurrentClientSpan(null);
-                return null;
-            }
+        Span newSpan = spanFactory().nextSpan(maybeParent());
+        SpanId nextContext = Brave.context(newSpan);
+        if (Boolean.FALSE.equals(nextContext.sampled())) {
+            currentSpan().setCurrentSpan(null);
+            return null;
         }
 
-        Span newSpan = newSpanId.toSpan();
-        newSpan.setName(requestName);
-        spanAndEndpoint().state().setCurrentClientSpan(newSpan);
-        return newSpanId;
+        recorder().name(newSpan, requestName);
+        currentSpan().setCurrentSpan(newSpan);
+        return nextContext;
     }
 
-    private SpanId getNewSpanId() {
-        Span parentSpan = spanAndEndpoint().state().getCurrentLocalSpan();
+    @Nullable SpanId maybeParent() {
+        Span parentSpan = currentLocalSpan().get();
         if (parentSpan == null) {
-            ServerSpan serverSpan = spanAndEndpoint().state().getCurrentServerSpan();
+            Span serverSpan = currentServerSpan().get();
             if (serverSpan != null) {
-                parentSpan = serverSpan.getSpan();
+                parentSpan = serverSpan;
             }
         }
-
-        long newSpanId = randomGenerator().nextLong();
-        SpanId.Builder builder = SpanId.builder().spanId(newSpanId);
-        if (parentSpan == null) return builder.build(); // new trace
-        return builder.traceId(parentSpan.getTrace_id()).parentId(parentSpan.getId()).build();
+        if (parentSpan == null) return null;
+        return Brave.context(parentSpan);
     }
 
     ClientTracer() {

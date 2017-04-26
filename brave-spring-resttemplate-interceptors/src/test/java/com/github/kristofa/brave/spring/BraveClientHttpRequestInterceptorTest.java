@@ -1,18 +1,25 @@
 package com.github.kristofa.brave.spring;
 
+import com.github.kristofa.brave.Brave;
 import com.github.kristofa.brave.ClientRequestInterceptor;
 import com.github.kristofa.brave.ClientResponseInterceptor;
 import com.github.kristofa.brave.ClientTracer;
 import com.github.kristofa.brave.SpanId;
 import com.github.kristofa.brave.http.SpanNameProvider;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.InOrder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.mock.http.client.MockClientHttpResponse;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import zipkin.TraceKeys;
 
 import java.io.IOException;
@@ -25,12 +32,11 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@RunWith(SpringJUnit4ClassRunner.class)
 public class BraveClientHttpRequestInterceptorTest {
-
-    private final ClientTracer clientTracer = mock(ClientTracer.class);
-    private final SpanNameProvider spanNameProvider = mock(SpanNameProvider.class);
-    private final BraveClientHttpRequestInterceptor subject = new BraveClientHttpRequestInterceptor(new ClientRequestInterceptor(clientTracer),
-            new ClientResponseInterceptor(clientTracer), spanNameProvider);
+    @Autowired ClientTracer clientTracer;
+    @Autowired SpanNameProvider spanNameProvider;
+    @Autowired BraveClientHttpRequestInterceptor subject;
 
     @Test(expected = IOException.class)
     public void interceptShouldLetExceptionOccurringDuringExecuteBlowUp() throws Exception {
@@ -123,5 +129,24 @@ public class BraveClientHttpRequestInterceptorTest {
         order.verify(clientTracer).setClientReceived();
     }
 
+    @Configuration
+    @Import(BraveClientHttpRequestInterceptor.class)
+    static class AppConfig {
+        @Bean ClientTracer clientTracer() {
+            return mock(ClientTracer.class);
+        }
 
+        @Bean Brave brave(ClientTracer clientTracer) {
+            Brave brave = mock(Brave.class);
+            when(brave.clientRequestInterceptor())
+                    .thenReturn(new ClientRequestInterceptor(clientTracer));
+            when(brave.clientResponseInterceptor())
+                    .thenReturn(new ClientResponseInterceptor(clientTracer));
+            return brave;
+        }
+
+        @Bean SpanNameProvider spanNameProvider() {
+            return mock(SpanNameProvider.class);
+        }
+    }
 }

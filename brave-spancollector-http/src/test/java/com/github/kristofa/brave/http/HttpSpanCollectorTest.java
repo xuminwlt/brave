@@ -1,6 +1,8 @@
 package com.github.kristofa.brave.http;
 
 import com.github.kristofa.brave.SpanCollectorMetricsHandler;
+import com.github.kristofa.brave.SpanId;
+import com.github.kristofa.brave.internal.InternalSpan;
 import com.twitter.zipkin.gen.Annotation;
 import com.twitter.zipkin.gen.Span;
 import java.util.Arrays;
@@ -17,6 +19,9 @@ import static java.util.Arrays.asList;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class HttpSpanCollectorTest {
+  static {
+    InternalSpan.initializeInstanceForTests();
+  }
 
   @Rule
   public final ZipkinRule zipkinRule = new ZipkinRule();
@@ -33,14 +38,14 @@ public class HttpSpanCollectorTest {
 
   @Test
   public void collectDoesntDoIO() throws Exception {
-    collector.collect(span(1L, "foo"));
+    collector.collect(span(1L));
 
     assertThat(zipkinRule.httpRequestCount()).isZero();
   }
 
   @Test
   public void collectIncrementsAcceptedMetrics() throws Exception {
-    collector.collect(span(1L, "foo"));
+    collector.collect(span(1L));
 
     assertThat(metrics.acceptedSpans.get()).isEqualTo(1);
     assertThat(metrics.droppedSpans.get()).isZero();
@@ -49,7 +54,7 @@ public class HttpSpanCollectorTest {
   @Test
   public void dropsWhenQueueIsFull() throws Exception {
     for (int i = 0; i < 1001; i++)
-      collector.collect(span(1L, "foo"));
+      collector.collect(span(1L));
 
     collector.flush(); // manually flush the spans
 
@@ -59,8 +64,8 @@ public class HttpSpanCollectorTest {
 
   @Test
   public void postsSpans() throws Exception {
-    collector.collect(span(1L, "foo"));
-    collector.collect(span(2L, "bar"));
+    collector.collect(span(1L));
+    collector.collect(span(2L));
 
     collector.flush(); // manually flush the spans
 
@@ -69,8 +74,8 @@ public class HttpSpanCollectorTest {
 
     // Now, let's read back the spans we sent!
     assertThat(zipkinRule.getTraces()).containsExactly(
-        asList(zipkinSpan(1L, "foo")),
-        asList(zipkinSpan(2L, "bar"))
+        asList(zipkinSpan(1L)),
+        asList(zipkinSpan(2L))
     );
   }
 
@@ -89,7 +94,7 @@ public class HttpSpanCollectorTest {
 
       HttpSpanCollector collector = new HttpSpanCollector(zipkin.url("/").toString(), config, metrics);
 
-      collector.collect(span(1L, "foo")
+      collector.collect(span(1L)
           .addToAnnotations(Annotation.create(1111L, new String(annotation2K), null)));
 
       collector.flush(); // manually flush the span
@@ -106,8 +111,8 @@ public class HttpSpanCollectorTest {
   public void incrementsDroppedSpansWhenServerErrors() throws Exception {
     zipkinRule.enqueueFailure(HttpFailure.sendErrorResponse(500, "Server Error!"));
 
-    collector.collect(span(1L, "foo"));
-    collector.collect(span(2L, "bar"));
+    collector.collect(span(1L));
+    collector.collect(span(2L));
 
     collector.flush(); // manually flush the spans
 
@@ -118,8 +123,8 @@ public class HttpSpanCollectorTest {
   public void incrementsDroppedSpansWhenServerDisconnects() throws Exception {
     zipkinRule.enqueueFailure(HttpFailure.disconnectDuringBody());
 
-    collector.collect(span(1L, "foo"));
-    collector.collect(span(2L, "bar"));
+    collector.collect(span(1L));
+    collector.collect(span(2L));
 
     collector.flush(); // manually flush the spans
 
@@ -142,11 +147,11 @@ public class HttpSpanCollectorTest {
     }
   }
 
-  static Span span(long traceId, String spanName) {
-    return new Span().setTrace_id(traceId).setId(traceId).setName(spanName);
+  static Span span(long traceId) {
+    return InternalSpan.instance.toSpan(SpanId.builder().spanId(traceId).build());
   }
 
-  static zipkin.Span zipkinSpan(long traceId, String spanName) {
-    return zipkin.Span.builder().traceId(traceId).id(traceId).name(spanName).build();
+  static zipkin.Span zipkinSpan(long traceId) {
+    return zipkin.Span.builder().traceId(traceId).id(traceId).name("").build();
   }
 }

@@ -1,11 +1,11 @@
 package com.github.kristofa.brave.okhttp;
 
+import com.github.kristofa.brave.Brave;
 import com.github.kristofa.brave.ClientRequestInterceptor;
 import com.github.kristofa.brave.ClientResponseInterceptor;
 import com.github.kristofa.brave.ClientTracer;
 import com.github.kristofa.brave.SpanId;
 import com.github.kristofa.brave.http.BraveHttpHeaders;
-import com.github.kristofa.brave.http.DefaultSpanNameProvider;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -31,13 +31,16 @@ public class BraveOkHttpRequestResponseInterceptorTest {
 
   private static final Long SPAN_ID = 151864L;
   private static final Long TRACE_ID = 8494864L;
+  private static final String TRACE_ID_STRING =
+      SpanId.builder().spanId(TRACE_ID).build().traceIdString();
   private static final String HTTP_METHOD_GET = "GET";
 
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
   @Rule
   public final MockWebServer server = new MockWebServer();
-
+  @Mock
+  private Brave brave;
   @Mock(answer = Answers.RETURNS_SMART_NULLS)
   private ClientTracer clientTracer;
 
@@ -48,8 +51,12 @@ public class BraveOkHttpRequestResponseInterceptorTest {
   public void setup() throws IOException {
     MockitoAnnotations.initMocks(this);
     this.spanId = SpanId.builder().spanId(SPAN_ID).traceId(TRACE_ID).parentId(null).build();
+    when(brave.clientRequestInterceptor())
+        .thenReturn(new ClientRequestInterceptor(clientTracer));
+    when(brave.clientResponseInterceptor())
+        .thenReturn(new ClientResponseInterceptor(clientTracer));
     this.client = new OkHttpClient.Builder()
-            .addInterceptor(new BraveOkHttpRequestResponseInterceptor(new ClientRequestInterceptor(clientTracer), new ClientResponseInterceptor(clientTracer), new DefaultSpanNameProvider()))
+            .addInterceptor(BraveOkHttpRequestResponseInterceptor.create(brave))
             .build();
   }
 
@@ -81,7 +88,7 @@ public class BraveOkHttpRequestResponseInterceptorTest {
     RecordedRequest serverRequest = server.takeRequest();
     assertEquals(HTTP_METHOD_GET, serverRequest.getMethod());
     assertEquals("1", serverRequest.getHeader(BraveHttpHeaders.Sampled.getName()));
-    assertEquals(Long.toString(TRACE_ID, 16), serverRequest.getHeader(BraveHttpHeaders.TraceId.getName()));
+    assertEquals(TRACE_ID_STRING, serverRequest.getHeader(BraveHttpHeaders.TraceId.getName()));
     assertEquals(Long.toString(SPAN_ID, 16), serverRequest.getHeader(BraveHttpHeaders.SpanId.getName()));
   }
 
@@ -114,7 +121,7 @@ public class BraveOkHttpRequestResponseInterceptorTest {
     RecordedRequest serverRequest = server.takeRequest();
     assertEquals(HTTP_METHOD_GET, serverRequest.getMethod());
     assertEquals("1", serverRequest.getHeader(BraveHttpHeaders.Sampled.getName()));
-    assertEquals(Long.toString(TRACE_ID, 16), serverRequest.getHeader(BraveHttpHeaders.TraceId.getName()));
+    assertEquals(TRACE_ID_STRING, serverRequest.getHeader(BraveHttpHeaders.TraceId.getName()));
     assertEquals(Long.toString(SPAN_ID, 16), serverRequest.getHeader(BraveHttpHeaders.SpanId.getName()));
   }
 
@@ -172,7 +179,7 @@ public class BraveOkHttpRequestResponseInterceptorTest {
     RecordedRequest serverRequest = server.takeRequest();
     assertEquals(HTTP_METHOD_GET, serverRequest.getMethod());
     assertEquals("1", serverRequest.getHeader(BraveHttpHeaders.Sampled.getName()));
-    assertEquals(Long.toString(TRACE_ID, 16), serverRequest.getHeader(BraveHttpHeaders.TraceId.getName()));
+    assertEquals(TRACE_ID_STRING, serverRequest.getHeader(BraveHttpHeaders.TraceId.getName()));
     assertEquals(Long.toString(SPAN_ID, 16), serverRequest.getHeader(BraveHttpHeaders.SpanId.getName()));
   }
 

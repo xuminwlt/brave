@@ -3,8 +3,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.zipkin.brave</groupId>
-    <artifactId>brave</artifactId>
-    <version>3.11.2-SNAPSHOT</version>
+    <artifactId>brave-parent</artifactId>
+    <version>4.2.1-SNAPSHOT</version>
   </parent>
   
   <artifactId>brave-spring-web-servlet-interceptor</artifactId>
@@ -13,24 +13,28 @@
       Spring HandlerInterceptorAdapter implementation.
   </description>
 
+  <properties>
+    <main.basedir>${project.basedir}/..</main.basedir>
+  </properties>
+
     <dependencies>
      <dependency>
-        <groupId>io.zipkin.brave</groupId>
-        <artifactId>brave-http</artifactId>
-        <version>3.11.2-SNAPSHOT</version>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>brave-web-servlet-filter</artifactId>
      </dependency>
+     <!-- implicitly servlet 3.0.1 -->
      <dependency>
         <groupId>org.springframework</groupId>
         <artifactId>spring-webmvc</artifactId>
         <scope>provided</scope>
      </dependency>
-        <dependency>
-            <groupId>io.zipkin.brave</groupId>
-            <artifactId>brave-core-spring</artifactId>
-            <version>3.11.2-SNAPSHOT</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>3.0.1</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
         <groupId>org.springframework</groupId>
         <artifactId>spring-test</artifactId>
         <scope>test</scope>
@@ -42,16 +46,9 @@
         <scope>test</scope>
      </dependency>
       <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-webapp</artifactId>
-          <version>${jetty.version}</version>
-          <scope>test</scope>
-      </dependency>
-     <dependency>
-          <groupId>javax.servlet</groupId>
-          <artifactId>javax.servlet-api</artifactId>
-          <version>3.0.1</version>
-          <scope>provided</scope>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>brave-http-tests</artifactId>
+        <scope>test</scope>
       </dependency>
   </dependencies>
 </project>

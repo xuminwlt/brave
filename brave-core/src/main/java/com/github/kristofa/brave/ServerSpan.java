@@ -13,8 +13,11 @@ import com.twitter.zipkin.gen.Span;
 @AutoValue
 public abstract class ServerSpan {
 
-    public final static ServerSpan EMPTY = ServerSpan.create(null);
-    static final ServerSpan NOT_SAMPLED = ServerSpan.create(false);
+    public static final ServerSpan EMPTY = new AutoValue_ServerSpan(null, null, null);
+    static final ServerSpan NOT_SAMPLED = new AutoValue_ServerSpan(null, null, false);
+
+    @Nullable
+    abstract SpanId spanId();
 
     /**
      * Gets the Trace/Span context.
@@ -34,36 +37,13 @@ public abstract class ServerSpan {
     @Nullable
     public abstract Boolean getSample();
 
-    static ServerSpan create(Span span, Boolean sample) {
-        return new AutoValue_ServerSpan(span, sample);
-    }
-
-    /**
-     * Creates a new initializes instance. Using this constructor also indicates we need to sample this request.
-     *
-     * @param traceId Trace id.
-     * @param spanId Span id.
-     * @param parentSpanId Parent span id, can be <code>null</code>.
-     * @param name Span name. Should be lowercase and not <code>null</code> or empty.
-     */
-     static ServerSpan create(long traceId, long spanId, @Nullable Long parentSpanId, String name) {
-        Span span = new Span();
-        span.setTrace_id(traceId);
-        span.setId(spanId);
-        if (parentSpanId != null) {
-            span.setParent_id(parentSpanId);
+    /** Converts the input into a new server span or {@linkplain ServerSpan#NOT_SAMPLED}. */
+    static ServerSpan create(Span span) {
+        SpanId context = Brave.context(span);
+        if (Boolean.FALSE.equals(context.sampled())) {
+            return ServerSpan.NOT_SAMPLED;
         }
-        span.setName(name);
-        return create(span, true);
-    }
-
-    /**
-     * Creates a new empty instance with no Span but with sample indication.
-     *
-     * @param sample Indicates if we should sample this span.
-     */
-    static ServerSpan create(final Boolean sample) {
-        return create(null, sample);
+        return new AutoValue_ServerSpan(context, span, context.sampled());
     }
 
     ServerSpan(){

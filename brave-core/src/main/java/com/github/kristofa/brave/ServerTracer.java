@@ -1,13 +1,12 @@
 package com.github.kristofa.brave;
 
-import com.google.auto.value.AutoValue;
-
-import com.github.kristofa.brave.SpanAndEndpoint.ServerSpanAndEndpoint;
 import com.github.kristofa.brave.internal.Nullable;
+import com.google.auto.value.AutoValue;
 import com.twitter.zipkin.gen.Endpoint;
-import zipkin.Constants;
-
+import com.twitter.zipkin.gen.Span;
 import java.util.Random;
+import zipkin.Constants;
+import zipkin.reporter.Reporter;
 
 import static com.github.kristofa.brave.internal.Util.checkNotBlank;
 
@@ -17,7 +16,7 @@ import static com.github.kristofa.brave.internal.Util.checkNotBlank;
  * <li>Detect if we are part of existing trace/span. For example with services doing http requests this can be done by
  * detecting and getting values of http header that reresent trace/span ids.</li>
  * <li>Once detected we submit state using one of 3 following methods depending on the state we are in:
- * {@link ServerTracer#setStateCurrentTrace(long, long, Long, String), {@link ServerTracer#setStateNoTracing()} or
+ * {@link ServerTracer#setStateCurrentTrace(SpanId, String)}, {@link ServerTracer#setStateNoTracing()} or
  * {@link ServerTracer#setStateUnknown(String)}.</li>
  * <li>Next we execute {@link ServerTracer#setServerReceived()} to mark the point in time at which we received the request.</li>
  * <li>Service request executes its logic...
@@ -29,73 +28,112 @@ import static com.github.kristofa.brave.internal.Util.checkNotBlank;
 @AutoValue
 public abstract class ServerTracer extends AnnotationSubmitter {
 
+    /** @deprecated Don't build your own ServerTracer. Use {@link Brave#serverTracer()} */
+    @Deprecated
     public static Builder builder() {
-        return new AutoValue_ServerTracer.Builder();
+        return new Builder();
     }
 
-    @Override
-    abstract ServerSpanAndEndpoint spanAndEndpoint();
-    abstract Random randomGenerator();
-    abstract SpanCollector spanCollector();
-    abstract Sampler traceSampler();
-    @Override
-    abstract AnnotationSubmitter.Clock clock();
+    @Override abstract ServerSpanThreadBinder currentSpan();
+    abstract SpanFactory spanFactory();
 
-    @AutoValue.Builder
-    public abstract static class Builder {
+    /** @deprecated Don't build your own ServerTracer. Use {@link Brave#serverTracer()} */
+    @Deprecated
+    public final static class Builder {
+        final SpanFactory.Default.Builder spanFactoryBuilder = SpanFactory.Default.builder();
+        Endpoint localEndpoint;
+        ServerSpanThreadBinder currentSpan;
+        Reporter reporter;
+        Clock clock;
 
-        public Builder state(ServerSpanState state) {
-            return spanAndEndpoint(ServerSpanAndEndpoint.create(state));
+        /** Used to generate new trace/span ids. */
+        public final Builder randomGenerator(Random randomGenerator) {
+            spanFactoryBuilder.randomGenerator(randomGenerator);
+            return this;
         }
 
-        abstract Builder spanAndEndpoint(ServerSpanAndEndpoint spanAndEndpoint);
+        public final Builder traceSampler(Sampler sampler) {
+            spanFactoryBuilder.sampler(sampler);
+            return this;
+        }
 
-        /**
-         * Used to generate new trace/span ids.
-         */
-        public abstract Builder randomGenerator(Random randomGenerator);
+        public final Builder state(ServerSpanState state) {
+            this.currentSpan = new ServerSpanThreadBinder(state);
+            this.localEndpoint = state.endpoint();
+            return this;
+        }
 
-        public abstract Builder spanCollector(SpanCollector spanCollector);
+        public final Builder reporter(Reporter<zipkin.Span> reporter) {
+            this.reporter = reporter;
+            return this;
+        }
 
-        public abstract Builder traceSampler(Sampler sampler);
+        /** @deprecated use {@link #reporter(Reporter)} */
+        @Deprecated
+        public final Builder spanCollector(SpanCollector spanCollector) {
+            return reporter(new SpanCollectorReporterAdapter(spanCollector));
+        }
 
-        public abstract Builder clock(AnnotationSubmitter.Clock clock);
+        public final Builder clock(Clock clock) {
+            this.clock = clock;
+            return this;
+        }
 
-        public abstract ServerTracer build();
+        public final ServerTracer build() {
+            return new AutoValue_ServerTracer(
+                new AutoValue_Recorder_Default(localEndpoint, clock, reporter),
+                currentSpan,
+                spanFactoryBuilder.build()
+            );
+        }
+
+        Builder() {
+        }
     }
 
     /**
      * Clears current span.
      */
     public void clearCurrentSpan() {
-        spanAndEndpoint().state().setCurrentServerSpan(null);
+        currentSpan().setCurrentSpan(ServerSpan.EMPTY);
+    }
+
+    /**
+     * @deprecated since 3.15 use {@link #setStateCurrentTrace(SpanId, String)}
+     */
+    @Deprecated
+    public void setStateCurrentTrace(long traceId, long spanId, @Nullable Long parentSpanId, String name) {
+        SpanId context = SpanId.builder().traceId(traceId).spanId(spanId).parentId(parentSpanId).build();
+        setStateCurrentTrace(context, name);
     }
 
     /**
      * Sets the current Trace/Span state. Using this method indicates we are part of an existing trace/span.
      *
-     * @param traceId Trace id.
-     * @param spanId Span id.
-     * @param parentSpanId Parent span id. Can be <code>null</code>.
-     * @param name Name should not be empty or <code>null</code>.
+     * @param context includes the trace identifiers extracted from the wire
+     * @param spanName should not be empty or <code>null</code>.
      * @see ServerTracer#setStateNoTracing()
      * @see ServerTracer#setStateUnknown(String)
      */
-    public void setStateCurrentTrace(long traceId, long spanId, @Nullable Long parentSpanId, @Nullable String name) {
-        checkNotBlank(name, "Null or blank span name");
-        spanAndEndpoint().state().setCurrentServerSpan(
-            ServerSpan.create(traceId, spanId, parentSpanId, name));
+    public void setStateCurrentTrace(SpanId context, String spanName) {
+        Span span = spanFactory().joinSpan(context);
+        setStateCurrentTrace(span, spanName);
     }
 
+    void setStateCurrentTrace(Span span, String spanName) {
+        checkNotBlank(spanName, "Null or blank span name");
+        recorder().name(span, spanName);
+        currentSpan().setCurrentSpan(ServerSpan.create(span));
+    }
     /**
      * Sets the current Trace/Span state. Using this method indicates that a parent request has decided that we should not
      * trace the current request.
      *
-     * @see ServerTracer#setStateCurrentTrace(long, long, Long, String)
+     * @see ServerTracer#setStateCurrentTrace(SpanId, String)
      * @see ServerTracer#setStateUnknown(String)
      */
     public void setStateNoTracing() {
-        spanAndEndpoint().state().setCurrentServerSpan(ServerSpan.NOT_SAMPLED);
+        currentSpan().setCurrentSpan(ServerSpan.NOT_SAMPLED);
     }
 
     /**
@@ -106,19 +144,13 @@ public abstract class ServerTracer extends AnnotationSubmitter {
      * @param spanName The name of our current request/span.
      */
     public void setStateUnknown(String spanName) {
-        checkNotBlank(spanName, "Null or blank span name");
-        long newTraceId = randomGenerator().nextLong();
-        if (!traceSampler().isSampled(newTraceId)) {
-            spanAndEndpoint().state().setCurrentServerSpan(ServerSpan.NOT_SAMPLED);
-            return;
-        }
-        spanAndEndpoint().state().setCurrentServerSpan(
-            ServerSpan.create(newTraceId, newTraceId, null, spanName));
+        Span span = spanFactory().nextSpan(null);
+        setStateCurrentTrace(span, spanName);
     }
 
     /**
      * Sets server received event for current request. This should be done after setting state using one of 3 methods
-     * {@link ServerTracer#setStateCurrentTrace(long, long, Long, String)} , {@link ServerTracer#setStateNoTracing()} or
+     * {@link ServerTracer#setStateCurrentTrace(SpanId, String)} , {@link ServerTracer#setStateNoTracing()} or
      * {@link ServerTracer#setStateUnknown(String)}.
      */
     public void setServerReceived() {
@@ -158,8 +190,8 @@ public abstract class ServerTracer extends AnnotationSubmitter {
      * Sets the server sent event for current thread.
      */
     public void setServerSend() {
-        if (submitEndAnnotation(Constants.SERVER_SEND, spanCollector())) {
-            spanAndEndpoint().state().setCurrentServerSpan(null);
+        if (submitEndAnnotation(Constants.SERVER_SEND)) {
+            currentSpan().setCurrentSpan(ServerSpan.EMPTY);
         }
     }
 

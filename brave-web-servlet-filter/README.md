@@ -1,4 +1,4 @@
-# brave-web-servlet-filter #
+# brave-web-servlet-filter
 
 The module contains a Servlet filter (javax.servlet.filter) to deal with server
 side integration: Getting existing span/trace state from request,
@@ -13,7 +13,7 @@ public class WebAppInitializer implements WebApplicationInitializer {
     public void onStartup(ServletContext servletContext) throws ServletException {
 
         Brave brave = new Brave.Builder("myservicename")).build();
-        servletContext.addFilter(“BraveServletFilter”, new BraveServletFilter(brave.serverRequestInterceptor(), brave.serverResponseInterceptor(), new DefaultSpanNameProvider()));
+        servletContext.addFilter(“BraveServletFilter”, BraveServletFilter.create(brave));
     }
 
 }

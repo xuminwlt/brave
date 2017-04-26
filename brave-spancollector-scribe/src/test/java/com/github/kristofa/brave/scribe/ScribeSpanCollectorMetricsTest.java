@@ -1,6 +1,8 @@
 package com.github.kristofa.brave.scribe;
 
 import com.github.kristofa.brave.SpanCollectorMetricsHandler;
+import com.github.kristofa.brave.SpanId;
+import com.github.kristofa.brave.internal.InternalSpan;
 import com.twitter.zipkin.gen.Span;
 import org.apache.thrift.transport.TTransportException;
 import org.junit.AfterClass;
@@ -14,10 +16,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ScribeSpanCollectorMetricsTest {
+    static {
+        InternalSpan.initializeInstanceForTests();
+    }
 
     private static final String HOST = "localhost";
     private static final int PORT = FreePortProvider.getNewFreePort();
-    private static final Span SPAN = new Span().setTrace_id(1).setId(2).setName("span name");
+    Span span = InternalSpan.instance.toSpan(SpanId.builder().traceId(1).spanId(2).build());
 
     private static ScribeServer scribeServer;
     private EventsHandler eventsHandler;
@@ -65,7 +70,7 @@ public class ScribeSpanCollectorMetricsTest {
 
         // when
         try (ScribeSpanCollector scribeSpanCollector = new ScribeSpanCollector(HOST, PORT, params)) {
-            scribeSpanCollector.collect(SPAN);
+            scribeSpanCollector.collect(span);
         }
 
         // then
@@ -84,9 +89,9 @@ public class ScribeSpanCollectorMetricsTest {
 
         // when
         try (ScribeSpanCollector scribeSpanCollector = new ScribeSpanCollector(HOST, PORT, params)) {
-            scribeSpanCollector.collect(SPAN);
-            scribeSpanCollector.collect(SPAN);
-            scribeSpanCollector.collect(SPAN);
+            scribeSpanCollector.collect(span);
+            scribeSpanCollector.collect(span);
+            scribeSpanCollector.collect(span);
         }
 
         // then
@@ -105,7 +110,7 @@ public class ScribeSpanCollectorMetricsTest {
 
         // when
         try (ScribeSpanCollector scribeSpanCollector = new ScribeSpanCollector("invalid-host", PORT, params)) {
-            scribeSpanCollector.collect(SPAN);
+            scribeSpanCollector.collect(span);
         }
 
         // then

@@ -2,8 +2,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.zipkin.brave</groupId>
-    <artifactId>brave</artifactId>
-    <version>3.11.2-SNAPSHOT</version>
+    <artifactId>brave-parent</artifactId>
+    <version>4.2.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>brave-benchmarks</artifactId>
@@ -12,7 +12,6 @@
 
   <properties>
     <main.basedir>${project.basedir}/..</main.basedir>
-    <jmh.version>1.12</jmh.version>
   </properties>
 
   <dependencies>
@@ -31,15 +30,24 @@
 
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>brave</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>brave-core</artifactId>
-      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>brave-http</artifactId>
     </dependency>
 
     <!-- for benchmarking SpanId -->
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>finagle-core_2.11</artifactId>
-      <version>6.35.0</version>
+      <artifactId>finagle-core_2.12</artifactId>
+      <version>${finagle.version}</version>
     </dependency>
   </dependencies>
 

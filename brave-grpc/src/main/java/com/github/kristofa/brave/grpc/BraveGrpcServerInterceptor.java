@@ -13,6 +13,7 @@ import com.github.kristofa.brave.ServerResponseInterceptor;
 import com.github.kristofa.brave.SpanId;
 import com.github.kristofa.brave.TraceData;
 
+import com.github.kristofa.brave.internal.Util;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -23,18 +24,46 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 
-import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.Collections;
 
 public final class BraveGrpcServerInterceptor implements ServerInterceptor {
 
+    /** Creates a tracing interceptor with defaults. Use {@link #builder(Brave)} to customize. */
+    public static BraveGrpcServerInterceptor create(Brave brave) {
+        return new Builder(brave).build();
+    }
+
+    public static Builder builder(Brave brave) {
+        return new Builder(brave);
+    }
+
+    public static final class Builder {
+        final Brave brave;
+
+        Builder(Brave brave) { // intentionally hidden
+            this.brave = Util.checkNotNull(brave, "brave");
+        }
+
+        public BraveGrpcServerInterceptor build() {
+            return new BraveGrpcServerInterceptor(this);
+        }
+    }
+
     private final ServerRequestInterceptor serverRequestInterceptor;
     private final ServerResponseInterceptor serverResponseInterceptor;
 
+    BraveGrpcServerInterceptor(Builder b) { // intentionally hidden
+        this.serverRequestInterceptor = b.brave.serverRequestInterceptor();
+        this.serverResponseInterceptor = b.brave.serverResponseInterceptor();
+    }
+
+    /**
+     * @deprecated please use {@link #create(Brave)} or {@link #builder(Brave)}
+     */
+    @Deprecated
     public BraveGrpcServerInterceptor(Brave brave) {
-        this.serverRequestInterceptor = checkNotNull(brave.serverRequestInterceptor());
-        this.serverResponseInterceptor = checkNotNull(brave.serverResponseInterceptor());
+        this(builder(brave));
     }
 
     @Override
@@ -58,10 +87,10 @@ public final class BraveGrpcServerInterceptor implements ServerInterceptor {
     static final class GrpcServerRequestAdapter<ReqT, RespT> implements ServerRequestAdapter {
 
         private final ServerCall<ReqT, RespT> call;
-        private MethodDescriptor<ReqT, RespT> method;
-        private Metadata requestHeaders;
+        private final MethodDescriptor<ReqT, RespT> method;
+        private final Metadata requestHeaders;
 
-        public GrpcServerRequestAdapter(ServerCall<ReqT, RespT> call, Metadata requestHeaders) {
+        GrpcServerRequestAdapter(ServerCall<ReqT, RespT> call, Metadata requestHeaders) {
             this.call = checkNotNull(call);
             this.method = checkNotNull(call.getMethodDescriptor());
             this.requestHeaders = checkNotNull(requestHeaders);
@@ -69,21 +98,26 @@ public final class BraveGrpcServerInterceptor implements ServerInterceptor {
 
         @Override
         public TraceData getTraceData() {
-            final String sampled = requestHeaders.get(BravePropagationKeys.Sampled);
-            if (sampled != null) {
-                if (sampled.equals("0") || sampled.toLowerCase().equals("false")) {
-                    return TraceData.builder().sample(false).build();
-                } else {
-                    final String parentSpanId = requestHeaders.get(BravePropagationKeys.ParentSpanId);
-                    final String traceId = requestHeaders.get(BravePropagationKeys.TraceId);
-                    final String spanId = requestHeaders.get(BravePropagationKeys.SpanId);
-                    if (traceId != null && spanId != null) {
-                        SpanId span = getSpanId(traceId, spanId, parentSpanId);
-                        return TraceData.builder().sample(true).spanId(span).build();
-                    }
-                }
+            String sampled = requestHeaders.get(BravePropagationKeys.Sampled);
+            String parentSpanId = requestHeaders.get(BravePropagationKeys.ParentSpanId);
+            String traceId = requestHeaders.get(BravePropagationKeys.TraceId);
+            String spanId = requestHeaders.get(BravePropagationKeys.SpanId);
+
+            // Official sampled value is 1, though some old instrumentation send true
+            Boolean parsedSampled = sampled != null
+                ? sampled.equals("1") || sampled.equalsIgnoreCase("true")
+                : null;
+
+            if (traceId != null && spanId != null) {
+                return TraceData.create(getSpanId(traceId, spanId, parentSpanId, parsedSampled));
+            } else if (parsedSampled == null) {
+                return TraceData.EMPTY;
+            } else if (parsedSampled.booleanValue()) {
+                // Invalid: The caller requests the trace to be sampled, but didn't pass IDs
+                return TraceData.EMPTY;
+            } else {
+                return TraceData.NOT_SAMPLED;
             }
-            return TraceData.builder().build();
         }
 
         @Override
@@ -93,14 +127,8 @@ public final class BraveGrpcServerInterceptor implements ServerInterceptor {
 
         @Override
         public Collection<KeyValueAnnotation> requestAnnotations() {
-            SocketAddress socketAddress = call.attributes().get(ServerCall.REMOTE_ADDR_KEY);
-            if (socketAddress != null) {
-                KeyValueAnnotation remoteAddrAnnotation = KeyValueAnnotation.create(
-                    GrpcKeys.GRPC_REMOTE_ADDR, socketAddress.toString());
-                return Collections.singleton(remoteAddrAnnotation);
-            } else {
-                return Collections.emptyList();
-            }
+            // the remote-addr attribute was removed in grpc 1.2
+            return Collections.emptyList();
         }
     }
 
@@ -123,10 +151,12 @@ public final class BraveGrpcServerInterceptor implements ServerInterceptor {
 
     }
 
-    static SpanId getSpanId(String traceId, String spanId, String parentSpanId) {
+    static SpanId getSpanId(String traceId, String spanId, String parentSpanId, Boolean sampled) {
         return SpanId.builder()
+            .traceIdHigh(traceId.length() == 32 ? convertToLong(traceId, 0) : 0)
             .traceId(convertToLong(traceId))
             .spanId(convertToLong(spanId))
+            .sampled(sampled)
             .parentId(parentSpanId == null ? null : convertToLong(parentSpanId)).build();
     }
 }

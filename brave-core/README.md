@@ -1,5 +1,8 @@
-# brave-core #
+# Deprecation Notice
+Brave was redesigned starting with version 4. Please see the
+[README](../brave/README.md) for details on how to use Brave's Tracer.
 
+# Brave Api (version 3)
 brave-core contains the core brave implementations used to set up and keep track of
 tracing state. 
 
@@ -100,3 +103,23 @@ will get proper trace/span state.
 
 Instead of using `BraveExecutorService` or the `ServerSpanThreadBinder` directly you can also
 use the `BraveCallable` and `BraveRunnable`. These are used internally by the BraveExecutorService.
+
+## 128-bit trace IDs
+
+Traditionally, Zipkin trace IDs were 64-bit. Starting with Zipkin 1.14,
+128-bit trace identifiers are supported. This can be useful in sites that
+have very large traffic volume, persist traces forever, or are re-using
+externally generated 128-bit IDs.
+
+If you want Brave to generate 128-bit trace identifiers when starting new
+root spans, set `Brave.Builder.traceId128Bit(true)`
+
+When 128-bit trace ids are propagated, they will be twice as long as
+before. For example, the `X-B3-TraceId` header will hold a 32-character
+value like `163ac35c9f6413ad48485a3953bb6124`.
+
+Before doing this, ensure your Zipkin setup is up-to-date, and downstream
+instrumented services can read the longer 128-bit trace IDs.
+
+Note: this only affects the trace ID, not span IDs. For example, span ids
+within a trace are always 64-bit. 

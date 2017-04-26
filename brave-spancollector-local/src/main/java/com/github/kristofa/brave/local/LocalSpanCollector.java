@@ -12,9 +12,15 @@ import zipkin.storage.AsyncSpanConsumer;
 import zipkin.storage.Callback;
 import zipkin.storage.StorageComponent;
 
+import static com.github.kristofa.brave.internal.DefaultSpanCodec.toZipkin;
+
 /**
  * SpanCollector which submits spans directly to a Zipkin {@link StorageComponent}.
+ *
+ * @deprecated replaced by {@link zipkin.reporter.AsyncReporter} and {@code LocalSender}
+ *             located in the "io.zipkin.reporter:zipkin-sender-local" dependency.
  */
+@Deprecated
 public final class LocalSpanCollector extends FlushingSpanCollector {
 
   @AutoValue
@@ -73,7 +79,7 @@ public final class LocalSpanCollector extends FlushingSpanCollector {
     // Brave 3 doesn't use zipkin spans. Convert accordingly
     List<zipkin.Span> zipkinSpans = new ArrayList<zipkin.Span>(drained.size());
     for (Span input : drained) {
-      zipkinSpans.add(input.toZipkin());
+      zipkinSpans.add(toZipkin(input));
     }
     // This dereferences a lazy, which might throw an exception if the storage system is down.
     AsyncSpanConsumer asyncSpanConsumer = storageComponent.asyncSpanConsumer();

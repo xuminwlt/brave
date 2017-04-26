@@ -5,6 +5,11 @@ import com.google.auto.value.AutoValue;
 import com.twitter.zipkin.gen.Endpoint;
 import com.twitter.zipkin.gen.Span;
 
+/**
+ * @deprecated this type was only used for {@link AnnotationSubmitter#create(SpanAndEndpoint,
+ * AnnotationSubmitter.Clock)}, which is deprecated.
+ */
+@Deprecated
 public interface SpanAndEndpoint {
 
     /**
@@ -24,15 +29,10 @@ public interface SpanAndEndpoint {
     Endpoint endpoint();
 
     /**
-     * Span and endpoint never change reference.
+     * @deprecated this type was only used for {@link AnnotationSubmitter#create(SpanAndEndpoint,
+     * AnnotationSubmitter.Clock)}, which is deprecated.
      */
-    @AutoValue
-    abstract class StaticSpanAndEndpoint implements SpanAndEndpoint {
-      static StaticSpanAndEndpoint create(@Nullable Span span, Endpoint endpoint) {
-        return new AutoValue_SpanAndEndpoint_StaticSpanAndEndpoint(span, endpoint);
-      }
-    }
-
+    @Deprecated
     @AutoValue
     abstract class ServerSpanAndEndpoint implements SpanAndEndpoint {
         abstract ServerSpanState state();
@@ -58,6 +58,11 @@ public interface SpanAndEndpoint {
         }
     }
 
+    /**
+     * @deprecated this type was only used for {@link AnnotationSubmitter#create(SpanAndEndpoint,
+     * AnnotationSubmitter.Clock)}, which is deprecated.
+     */
+    @Deprecated
     @AutoValue
     abstract class ClientSpanAndEndpoint implements SpanAndEndpoint {
         abstract ServerClientAndLocalSpanState state();
@@ -83,6 +88,11 @@ public interface SpanAndEndpoint {
         }
     }
 
+    /**
+     * @deprecated this type was only used for {@link AnnotationSubmitter#create(SpanAndEndpoint,
+     * AnnotationSubmitter.Clock)}, which is deprecated.
+     */
+    @Deprecated
     @AutoValue
     abstract class LocalSpanAndEndpoint implements SpanAndEndpoint {
         abstract ServerClientAndLocalSpanState state();

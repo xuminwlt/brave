@@ -1,18 +1,20 @@
 package com.github.kristofa.brave.scribe;
 
-import static org.junit.Assert.assertEquals;
-
+import com.github.kristofa.brave.SpanId;
+import com.github.kristofa.brave.internal.InternalSpan;
+import com.twitter.zipkin.gen.Span;
 import org.apache.thrift.transport.TTransportException;
 import org.junit.Test;
 
-import com.twitter.zipkin.gen.Span;
+import static org.junit.Assert.assertEquals;
 
 public class ITScribeSpanCollectorFailOnSetup {
+    static {
+        InternalSpan.initializeInstanceForTests();
+    }
 
     private static final int PORT = FreePortProvider.getNewFreePort();
-    private static final long SPAN_ID = 1;
-    private static final long TRACE_ID = 2;
-    private static final String SPAN_NAME = "spanname";
+    Span span = InternalSpan.instance.toSpan(SpanId.builder().traceId(1).spanId(2).build());
 
     /**
      * Integration isSampled that checks failOnSetup = false. The isSampled basically shows that no exception is thrown when the server
@@ -25,12 +27,6 @@ public class ITScribeSpanCollectorFailOnSetup {
     public void testFailOnSetupFalse() throws TTransportException, InterruptedException {
         final ScribeSpanCollectorParams params = new ScribeSpanCollectorParams();
         params.setFailOnSetup(false);
-
-        final Span span = new Span();
-        span.setId(SPAN_ID);
-        span.setTrace_id(TRACE_ID);
-        span.setName(SPAN_NAME);
-
         // Should not throw exception but log error.
         final ScribeSpanCollector scribeSpanCollector = new ScribeSpanCollector("localhost", PORT, params);
 

@@ -12,18 +12,67 @@ the request header. Also sends sr annotations.
 Also sends cs annotations.
 *   `BraveClientResponseFilter` - Intercepts JAX-RS 2.x client responses and sends cr annotations. Also submits the completed span.
 
-## Usage ##
+For convenience there is also a JAX-RS Feature `BraveTracingFeature` that can be added to clients as well as services.
 
-For server side setup, you simply need to tell JAX-RS 2.x to scan the com.github.kristofa.brave.jaxrs2 package, and
-the container filters will be picked up and registered automatically.
+## Configuration
 
-for Resteasy 3 and Jersey 2 examples check corresponding modules documentation
+### Dependency Injection
+If using Resteasy 3 with Spring, see [../brave-resteasy3-spring/README.md]. 
+If using Jersey 2 with Spring, see [../brave-jersey2/README.md]. 
 
-For client side setup, you just have to register the client filters with your JAX-RS 2 client before you make your request.
+Tracing always needs instances of type `Brave` and `SpanNameProvider`
+configured. Make sure these are in place before proceeding.
 
-It should look something like:
+Then, use your dependency injection library to configure `BraveTracingFeature`.
+this will setup filters automatically.
 
-    Client client = ClientBuilder.newClient();
-    client.register(myBraveClientRequestFilter);
-    client.register(myBraveClientResponseFilter);
+### Manual
 
+For server side setup, an Application class could look like this:
+
+```java
+public class MyApplication extends Application {
+
+  public Set<Object> getSingletons() {
+    Brave brave = new Brave.Builder().build();
+    BraveTracingFeature tracingFeature = BraveTracingFeature.create(brave);
+    return new LinkedHashSet<>(Arrays.asList(tracingFeature));
+  }
+
+}
+```
+
+For client side setup, you just have to register the BraveTracingFeature
+with your JAX-RS 2 client before you make your request:
+
+```java
+client = ClientBuilder.newBuilder()
+    .register(BraveTracingFeature.create(brave))
+    .build();
+```
+
+## Exception handling
+`ContainerResponseFilter` has no means to handle uncaught exceptions.
+Unless you provide a catch-all exception mapper, requests that result in
+unhandled exceptions will leak until they are eventually flushed.
+
+Besides using framework-specific code, the only approach is to make a
+custom `ExceptionMapper`, similar to below, which ensures a request is
+sent back even when something unexpected happens.
+
+```java
+@Provider
+public static class CatchAllExceptions implements ExceptionMapper<Exception> {
+
+  @Override public Response toResponse(Exception e) {
+    if (e instanceof WebApplicationException) {
+      return ((WebApplicationException) e).getResponse();
+    }
+
+    return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+        .entity("Internal error")
+        .type("text/plain")
+        .build();
+  }
+}
+```

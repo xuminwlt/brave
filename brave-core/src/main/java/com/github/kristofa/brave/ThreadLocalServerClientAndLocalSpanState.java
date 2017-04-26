@@ -26,6 +26,13 @@ public final class ThreadLocalServerClientAndLocalSpanState implements ServerCli
 
     private final Endpoint endpoint;
 
+    // visible for testing
+    public static void clear() {
+        currentServerSpan.remove();
+        currentClientSpan.remove();
+        currentLocalSpan.remove();
+    }
+
     /**
      * Constructor
      *
@@ -60,9 +67,7 @@ public final class ThreadLocalServerClientAndLocalSpanState implements ServerCli
         this.endpoint = endpoint;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** Never returns null: {@code setCurrentServerSpan(null)} coerces to {@link ServerSpan#EMPTY} */
     @Override
     public ServerSpan getCurrentServerSpan() {
         return currentServerSpan.get();
