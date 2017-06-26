@@ -21,8 +21,7 @@ http (as opposed to Kafka).
 // Configure a reporter, which controls how often spans are sent
 //   (the dependency is io.zipkin.reporter:zipkin-sender-okhttp3)
 sender = OkHttpSender.create("http://127.0.0.1:9411/api/v1/spans");
-reporter = AsyncReporter.builder(sender).build();
-
+reporter = AsyncReporter.create(sender);
 // Create a tracing component with the service name you want to see in Zipkin.
 tracing = Tracing.newBuilder()
                  .localServiceName("my-service")
@@ -76,14 +75,39 @@ try {
 }
 ```
 
+### Customizing spans
 Once you have a span, you can add tags to it, which can be used as lookup
-keys or details. For example, you might add a tag with your runtime version:
+keys or details. For example, you might add a tag with your runtime
+version.
 
 ```java
 span.tag("clnt/finagle.version", "6.36.0");
 ```
 
+When exposing the ability to customize spans to third parties, prefer
+`brave.SpanCustomizer` as opposed to `brave.Span`. The former is simpler to
+understand and test, and doesn't tempt users with span lifecycle hooks.
+
+```java
+interface MyTraceCallback {
+  void request(Request request, SpanCustomizer customizer);
+}
+```
+
+Since `brave.Span` implements `brave.SpanCustomizer`, it is just as easy for you
+to pass to users.
+
+Ex.
+```java
+for (MyTraceCallback callback : userCallbacks) {
+  callback.request(request, span);
+}
+```
+
 ### RPC tracing
+Check for [instrumentation written here](../instrumentation/) and [Zipkin's list](http://zipkin.io/pages/existing_instrumentations.html)
+before rolling your own RPC instrumentation!
+
 RPC tracing is often done automatically by interceptors. Under the scenes,
 they add tags and events that relate to their role in an RPC operation.
 
@@ -154,6 +178,7 @@ next = tracer.newSpan(oneWayReceive.context()).name("step2").start();
 There's a working example of a one-way span [here](src/test/java/brave/features/async/OneWaySpanTest.java).
 
 ## Sampling
+
 Sampling may be employed to reduce the data collected and reported out
 of process. When a span isn't sampled, it adds no overhead (noop).
 
@@ -164,6 +189,28 @@ propagated downstream.
 By default, there's a global sampler that applies a single rate to all
 traced operations. `Tracer.Builder.sampler` is how you indicate this,
 and it defaults to trace every request.
+
+### Declarative sampling
+
+Some need to sample based on the type or annotations of a java method.
+
+Most users will use a framework interceptor which automates this sort of
+policy. Here's how they might work internally.
+
+```java
+// derives a sample rate from an annotation on a java method
+DeclarativeSampler<Traced> sampler = DeclarativeSampler.create(Traced::sampleRate);
+
+@Around("@annotation(traced)")
+public Object traceThing(ProceedingJoinPoint pjp, Traced traced) throws Throwable {
+  Span span = tracing.tracer().newTrace(sampler.sample(traced))...
+  try {
+    return pjp.proceed();
+  } finally {
+    span.finish();
+  }
+}
+```
 
 ### Custom sampling
 
@@ -185,6 +232,8 @@ Span newTrace(Request input) {
   return tracer.newTrace(flags);
 }
 ```
+
+Note: the above is the basis for the built-in [http sampler](../instrumentation/http)
 
 ## Propagation
 Propagation is needed to ensure activity originating from the same root
@@ -294,6 +343,16 @@ try (SpanInScope ws = tracer.withSpanInScope(span)) {
 }
 ```
 
+In edge cases, you may need to clear the current span temporarily. For
+example, launching a task that should not be associated with the current
+request. To do this, simply pass null to `withSpanInScope`.
+
+```java
+try (SpanInScope cleared = tracer.withSpanInScope(null)) {
+  startBackgroundThread();
+}
+```
+
 ### Working with callbacks
 
 Many libraries expose a callback model as opposed to an interceptor one.
@@ -363,6 +422,12 @@ class MyFilter extends Filter {
   }
 }
 ```
+
+## Disabling Tracing
+
+If you are in a situation where you need to turn off tracing at runtime,
+invoke `Tracing.setNoop(true)`. This will turn any new spans into "noop"
+spans, and drop any data until `Tracing.setNoop(false)` is invoked.
 
 ## Performance
 Brave has been built with performance in mind. Using the core Span api,

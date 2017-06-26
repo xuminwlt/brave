@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.zipkin.brave</groupId>
     <artifactId>brave-parent</artifactId>
-    <version>4.2.1-SNAPSHOT</version>
+    <version>4.4.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>brave</artifactId>
@@ -32,7 +32,7 @@
       <groupId>org.jvnet</groupId>
       <artifactId>animal-sniffer-annotation</artifactId>
       <version>1.0</version>
-      <!-- annotations are not runtime rentition, so don't need a runtime dep -->
+      <!-- annotations are not runtime retention, so don't need a runtime dep -->
       <scope>provided</scope>
     </dependency>
     <!-- for value types... don't worry. this dependency is compile only! -->
@@ -75,6 +75,22 @@
       <groupId>com.twitter</groupId>
       <artifactId>finagle-core_2.12</artifactId>
       <version>${finagle.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.aspectj</groupId>
+      <artifactId>aspectjweaver</artifactId>
+      <version>1.8.10</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-test</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

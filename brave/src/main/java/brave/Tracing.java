@@ -1,13 +1,14 @@
 package brave;
 
 import brave.internal.Internal;
-import brave.internal.Nullable;
 import brave.internal.Platform;
 import brave.propagation.CurrentTraceContext;
 import brave.propagation.Propagation;
 import brave.propagation.TraceContext;
 import brave.sampler.Sampler;
 import java.io.Closeable;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 import zipkin.Endpoint;
 import zipkin.reporter.AsyncReporter;
 import zipkin.reporter.Reporter;
@@ -68,6 +69,28 @@ public abstract class Tracing implements Closeable {
     return tracing != null ? tracing.tracer() : null;
   }
 
+  final AtomicBoolean noop = new AtomicBoolean(false);
+
+  /**
+   * When true, no recording is done and nothing is reported to zipkin. However, trace context is
+   * still injected into outgoing requests.
+   *
+   * @see Span#isNoop()
+   */
+  public boolean isNoop() {
+    return noop.get();
+  }
+
+  /**
+   * Set true to drop data and only return {@link Span#isNoop() noop spans} regardless of sampling
+   * policy. This allows operators to stop tracing in risk scenarios.
+   *
+   * @see #isNoop()
+   */
+  public void setNoop(boolean noop) {
+    this.noop.set(noop);
+  }
+
   /**
    * Returns the most recently created tracing component iff it hasn't been closed. null otherwise.
    *
@@ -121,8 +144,7 @@ public abstract class Tracing implements Closeable {
      * <p>For example, here's how to batch send spans via http:
      *
      * <pre>{@code
-     * reporter = AsyncReporter.builder(URLConnectionSender.create("http://localhost:9411/api/v1/spans"))
-     *                         .build();
+     * reporter = AsyncReporter.create(URLConnectionSender.create("http://localhost:9411/api/v1/spans"));
      *
      * tracerBuilder.reporter(reporter);
      * }</pre>
@@ -200,7 +222,7 @@ public abstract class Tracing implements Closeable {
     final Clock clock;
 
     Default(Builder builder) {
-      this.tracer = new Tracer(builder);
+      this.tracer = new Tracer(builder, noop);
       this.propagationFactory = builder.propagationFactory;
       this.stringPropagation = builder.propagationFactory.create(Propagation.KeyFactory.STRING);
       this.currentTraceContext = builder.currentTraceContext;
